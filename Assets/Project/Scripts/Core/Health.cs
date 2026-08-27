@@ -63,7 +63,7 @@ namespace VeiledHunger.Core
             OnHealthChanged?.Invoke(CurrentHealth, _maxHealth);
         }
 
-        private void Kill()
+        public void Kill()
         {
             if (IsDead) return;
 

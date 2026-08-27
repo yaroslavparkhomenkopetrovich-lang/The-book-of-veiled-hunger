@@ -4,25 +4,26 @@ using UnityEngine.AI;
 using VeiledHunger.Core;
 
 [RequireComponent(typeof(NavMeshAgent))]
-public class EnemyController : MonoBehaviour, IDamageable
+[RequireComponent(typeof(Health))]
+public class EnemyController : MonoBehaviour
 {
-    [Header("Stats")]
-    [SerializeField] private float _maxHealth = 50f;
+    [Header("Attack Settings")]
     [SerializeField] private int _attackDamage = 10;
     [SerializeField] private float _attackCooldown = 1.0f;
+    [SerializeField] private DamageType _attackType = DamageType.Physical; // Physical by default, claws, mele, bites
 
     [Header("Targeting & Performance")]
     [SerializeField] private float _pathUpdateInterval = 0.2f;
 
     private NavMeshAgent _agent;
+    private Health _health;
     private Transform _playerTransform;
-    private float _currentHealth;
     private float _lastAttackTime;
     private float _nextPathUpdateTime;
     private void Awake()
     {
         _agent = GetComponent<NavMeshAgent>();
-        _currentHealth = _maxHealth;
+        _health = GetComponent<Health>();
     }
 
 
@@ -30,18 +31,29 @@ public class EnemyController : MonoBehaviour, IDamageable
     void Start()
     {
         // Cache references to player via tag
-        GameObject playerObj = GameObject.FindGameObjectWithTag("Player");\
+        GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
         if (playerObj != null )
         { 
             _playerTransform = playerObj.transform; 
         }
     }
 
+    private void OnEnable()
+    {
+        // Subscribe to Health's death event
+        _health.OnDied += HandleDeath;
+    }
+
+    private void OnDisable()
+    {
+        // Unsubscribe to prevent memory leaks
+        _health.OnDied -= HandleDeath;
+    }
+
     // Update is called once per frame
     void Update()
     {
-        if (_playerTransform == null) return;
-
+        if (_health.IsDead || _playerTransform == null) return;
         UpdatePathfinding();
     }
 
@@ -70,25 +82,24 @@ public class EnemyController : MonoBehaviour, IDamageable
                 // Extract collision contact point and surface normal
                 ContactPoint contact = collision.GetContact(0);
 
-                playerDamageable.TakeDamage(_attackDamage, contact.point, contact.normal);
+                // Package the attack data into a stack-aalocated DamageInfo struct
+                DamageInfo meeleHit = new DamageInfo(
+                    _attackDamage,
+                    _attackType,
+                    gameObject,
+                    contact.point,
+                    contact.normal
+                );
+
+                playerDamageable.TakeDamage(meeleHit);
                 _lastAttackTime = Time.time;
             }
         }
     }
 
-    public void TakeDamage (int damageAmount, Vector3 hitPoint, Vector3 hitNormal)
+    private void HandleDeath()
     {
-        _currentHealth -= damageAmount;
-
-        if (_currentHealth <= 0)
-        {
-            Sleep();
-        }
+        _agent.enabled = false;
+        gameObject.SetActive(false);
     }
-
-    private void Sleep()
-    {
-        // Destroy instance on lethal hit
-        Destroy(gameObject);
-    }   
 }
