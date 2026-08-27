@@ -1,16 +1,26 @@
+using TMPro;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class TopDownCameraFollow : MonoBehaviour
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
-    {
-        
-    }
+    [Header("Tracking Target")]
+    [SerializeField] private Transform _target;
 
-    // Update is called once per frame
-    void Update()
+    [Header("Position & Offset")]
+    [SerializeField] private Vector3 _offset = new Vector3(0f, 15f, -8f);
+    [SerializeField] private float _smoothSpeed5f;
+
+    private void LateUpdate()
     {
-        
+        if (_target == null) return;
+
+        Vector3 desiredPosition = _target.position + _offset;
+
+        transform.position = Vector3.Lerp(
+            transform.position,
+            desiredPosition,
+            _smoothSpeed5f * Time.deltaTime
+            );
     }
 }
