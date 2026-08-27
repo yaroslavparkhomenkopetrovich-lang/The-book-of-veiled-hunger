@@ -41,13 +41,13 @@ public class EnemyController : MonoBehaviour
     private void OnEnable()
     {
         // Subscribe to Health's death event
-        _health.OnDied += HandleDeath;
+        _health.OnDeath += HandleDeath;
     }
 
     private void OnDisable()
     {
         // Unsubscribe to prevent memory leaks
-        _health.OnDied -= HandleDeath;
+        _health.OnDeath -= HandleDeath;
     }
 
     // Update is called once per frame
