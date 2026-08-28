@@ -1,10 +1,8 @@
-using System.Diagnostics.Tracing;
-using System.Threading;
 using UnityEngine;
 using UnityEngine.Pool;
-using VeiledHunger.Core;
+using Assets.Project.Scripts.Combat;
 
-namespace VeiledHunger.Weapons
+namespace Assets.Project.Scripts.Weapons
 {
     [RequireComponent(typeof(Collider))]
     public class Projectile : MonoBehaviour
@@ -58,7 +56,7 @@ namespace VeiledHunger.Weapons
                 Vector3 hitPoint = other.ClosestPoint(transform.position);
                 Vector3 hitNormal = (transform.position - hitPoint).normalized;
 
-                DamageInfo hitInfo = new DamageInfo(
+                DamageInfo hitInfo = new(
                     _weaponData.damage,
                     _weaponData.damageType,
                     _instigator,

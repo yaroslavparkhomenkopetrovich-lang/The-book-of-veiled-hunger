@@ -1,5 +1,6 @@
 using Unity.VisualScripting;
 using UnityEngine;
+using Assets.Project.Scripts.Weapons;
 
 [RequireComponent(typeof(Rigidbody))]
 public class PlayerController : MonoBehaviour

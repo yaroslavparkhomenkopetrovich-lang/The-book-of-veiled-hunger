@@ -1,7 +1,6 @@
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.AI;
-using VeiledHunger.Core;
+using Assets.Project.Scripts.Combat;
 
 [RequireComponent(typeof(NavMeshAgent))]
 [RequireComponent(typeof(Health))]
@@ -32,7 +31,7 @@ public class EnemyController : MonoBehaviour
     {
         // Cache references to player via tag
         GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
-        if (playerObj != null )
+        if (playerObj != null)
         { 
             _playerTransform = playerObj.transform; 
         }
@@ -40,6 +39,12 @@ public class EnemyController : MonoBehaviour
 
     private void OnEnable()
     {
+        // Reset collider and navmesh state for reuse
+        if (TryGetComponent(out Collider collider)) collider.enabled = true;
+        if (_agent != null) _agent.enabled = true;
+        {
+            collider.enabled = true;
+        }
         // Subscribe to Health's death event
         _health.OnDeath += HandleDeath;
     }
@@ -83,7 +88,7 @@ public class EnemyController : MonoBehaviour
                 ContactPoint contact = collision.GetContact(0);
 
                 // Package the attack data into a stack-aalocated DamageInfo struct
-                DamageInfo meeleHit = new DamageInfo(
+                DamageInfo meeleHit = new(
                     _attackDamage,
                     _attackType,
                     gameObject,
@@ -97,9 +102,25 @@ public class EnemyController : MonoBehaviour
         }
     }
 
-    private void HandleDeath()
+    private void HandleDeath(GameObject attacker)
     {
-        _agent.enabled = false;
-        gameObject.SetActive(false);
+        // Disable AI navigation logic
+        if (_agent != null)
+        {
+            _agent.isStopped = true;
+            _agent.enabled = false;
+        }
+
+        // Trigger death animation, loot here
+
+        // Disable collider so bullets pass through and player can walk over the fallen enemy
+        if (TryGetComponent(out Collider collider))
+        {
+            collider.enabled = false;
+        }
+
+        gameObject.SetActive(false); // More efficient than destroying and recreating the object if using object pooling
+
+        //Destroy(gameObject, 2f ); // Or some pool release logic
     }
 }

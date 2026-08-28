@@ -1,6 +1,7 @@
 using UnityEngine;
-using VeiledHunger.Core;
-namespace VeiledHunger.Weapons
+using Assets.Project.Scripts.Combat;
+
+namespace Assets.Project.Scripts.Weapons
 {
     [CreateAssetMenu(fileName = "NewWeaponData", menuName = "Combat/Weapon Data")]
 

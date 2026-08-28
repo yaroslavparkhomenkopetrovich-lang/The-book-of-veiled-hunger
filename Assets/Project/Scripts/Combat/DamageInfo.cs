@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace VeiledHunger.Core
+namespace Assets.Project.Scripts.Combat
 {
     public readonly struct DamageInfo
     {

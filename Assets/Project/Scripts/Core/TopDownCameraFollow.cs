@@ -8,7 +8,7 @@ public class TopDownCameraFollow : MonoBehaviour
     [SerializeField] private Transform _target;
 
     [Header("Position & Offset")]
-    [SerializeField] private Vector3 _offset = new Vector3(0f, 15f, -8f);
+    [SerializeField] private Vector3 _offset = new (0f, 15f, -8f);
     [SerializeField] private float _smoothSpeed5f;
 
     private void LateUpdate()

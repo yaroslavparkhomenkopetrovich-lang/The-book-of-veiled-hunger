@@ -1,6 +1,4 @@
-using UnityEngine;
-
-namespace VeiledHunger.Core
+namespace Assets.Project.Scripts.Combat
 { 
     public interface IDamageable
     {
