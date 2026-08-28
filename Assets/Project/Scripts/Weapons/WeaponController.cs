@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Pool;
+using VeiledHunger.Weapons;
 
 public class WeaponController : MonoBehaviour
 {
@@ -87,6 +88,6 @@ public class WeaponController : MonoBehaviour
         bullet.transform.rotation = _firePoint.rotation * spreadRotation;
 
         // 3. Initiate speed, damage, and assign the pool reference for recycling
-        bullet.Initialize(_weaponData, _projectilePool);
+        bullet.Initialize(_weaponData, gameObject, _projectilePool);
     }
 }
