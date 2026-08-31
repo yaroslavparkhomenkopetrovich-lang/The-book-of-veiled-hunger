@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace Assets.Project.Scripts.Combat
 {
-    public class Health : MonoBehaviour
+    public class Health : MonoBehaviour, IDamageable
     {
         [Header("Health Settings")]
         [SerializeField] private int _maxHealth = 100;
@@ -55,6 +55,7 @@ namespace Assets.Project.Scripts.Combat
             IsDead = true;
 
             OnDeath?.Invoke(attacker);
+            gameObject.SetActive(false); // Optional: disable the GameObject on death
         }
 
         public void Heal(int amount, bool allowOverheal = false)

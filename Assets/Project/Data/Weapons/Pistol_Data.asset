@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0364b7bb18ae07a42932b3d47966a8fa, type: 3}
+  m_Name: Pistol_Data
+  m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Weapons.WeaponData
+  weaponName: Vanguard Heavy Rifle
+  fireRate: 0.25
+  damage: 15
+  damageType: 0
+  bulletSpeed: 35
+  bulletLifetime: 2
+  spreadAngle: 2
+  bulletPrefab: {fileID: 3697231084865457280, guid: e3889327cf3ebaa4a8df94842a912557, type: 3}

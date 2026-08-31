@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace Assets.Project.Scripts.Combat
 {
-    public class Armor : MonoBehaviour
+    public class Armor : MonoBehaviour, IArmor
     {
         [Header("Armor Settings")]
         [SerializeField] private int _maxArmor = 100;

@@ -24,6 +24,9 @@ public class PlayerController : MonoBehaviour
         _rigidbody = GetComponent<Rigidbody>();
         _mainCamera = Camera.main;
 
+        // Enable physics interpolation for smoother movement
+        _rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+
         // Configure physics properties for responsive arcade control
         _rigidbody.useGravity = false;
         _rigidbody.constraints = RigidbodyConstraints.FreezePositionY |
@@ -59,10 +62,11 @@ public class PlayerController : MonoBehaviour
         if (_mainCamera == null) return;
 
         Ray ray = _mainCamera.ScreenPointToRay(Input.mousePosition);
+        Plane groundPlane = new (Vector3.up, new Vector3(0f, transform.position.y, 0f));
 
-        if (Physics.Raycast(ray, out RaycastHit hitInfo, 200f, _aimLayerMask))
+        if (groundPlane.Raycast(ray, out float enterDistance))
         {
-            _lookTarget = hitInfo.point;
+            _lookTarget = ray.GetPoint(enterDistance);
             _lookTarget.y = transform.position.y; // Keep rotation level on the horizontal plan
         }
     }
@@ -70,7 +74,7 @@ public class PlayerController : MonoBehaviour
     private void HandleFiringInput()
     {
         // Continuous fire when holding left click
-        if (Input.GetButton("Fire1") && _weaponController != null)
+        if (Input.GetMouseButton(0) && _weaponController != null)
         {
             _weaponController.TryShoot();
         }
@@ -85,6 +89,7 @@ public class PlayerController : MonoBehaviour
     private void RotatePlayer()
     {
         Vector3 directionToTarget = _lookTarget - transform.position;
+        directionToTarget.y = 0f; // Keep rotation level on the horizontal plane
 
         if (directionToTarget.sqrMagnitude > 0.001f)
         {

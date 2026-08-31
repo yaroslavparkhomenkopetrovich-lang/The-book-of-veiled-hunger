@@ -46,6 +46,7 @@ namespace Assets.Project.Scripts.Weapons
 
         private void OnTriggerEnter(Collider other)
         {
+            Debug.Log($"[1) HIT DETECTED] Bullet hit: {other.gameObject.name}");
             // Ignore the shooter who fired the projectile
             if (_instigator != null && other.gameObject == _instigator) return;
 
@@ -65,6 +66,7 @@ namespace Assets.Project.Scripts.Weapons
                 );
 
                 target.TakeDamage(hitInfo);
+
                 Release();
             }
             else if(!other.isTrigger)
