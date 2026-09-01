@@ -42,11 +42,11 @@ namespace Assets.Project.Scripts.Combat
             OnHitTaken?.Invoke(info);
             OnHealthChanged?.Invoke(_currentHealth, _maxHealth);
 
-            // 4) Check for death
-            if (_currentHealth <= 0)
-            {
-                Die(info.Instigator);
-            }
+            //// 4) Check for death
+            //if (_currentHealth <= 0)
+            //{
+            //    Die(info.Instigator);
+            //}
         }
 
         public void Die(GameObject attacker = null)
@@ -54,8 +54,8 @@ namespace Assets.Project.Scripts.Combat
             if (IsDead) return;
             IsDead = true;
 
-            OnDeath?.Invoke(attacker);
-            gameObject.SetActive(false); // Optional: disable the GameObject on death
+            //OnDeath?.Invoke(attacker);
+            //gameObject.SetActive(false); // Optional: disable the GameObject on death
         }
 
         public void Heal(int amount, bool allowOverheal = false)
