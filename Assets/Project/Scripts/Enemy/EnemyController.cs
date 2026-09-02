@@ -3,13 +3,13 @@ using Assets.Project.Scripts.Enemy;
 using Assets.Project.Scripts.Combat;
 
 [RequireComponent(typeof(EnemyMovement))]
-[RequireComponent(typeof(Health))]
+[RequireComponent(typeof(HealthData))]
 [RequireComponent(typeof(EnemyMeleeAttack))]
 public class EnemyController : MonoBehaviour
 {
     private EnemyMovement _movement;
     private EnemyMeleeAttack _attack;
-    private Health _health;
+    private HealthData _healthData;
     private Transform _playerTransform;
     private IDamageable _playerDamageable;
 
@@ -17,7 +17,7 @@ public class EnemyController : MonoBehaviour
     {
         _movement = GetComponent<EnemyMovement>();
         _attack = GetComponent<EnemyMeleeAttack>();
-        _health = GetComponent<Health>();   
+        _healthData = GetComponent<HealthData>();   
     }
 
     public void Start()
@@ -33,7 +33,7 @@ public class EnemyController : MonoBehaviour
     // If a player within range, stop and attack
     private void Update()
     {
-        if (_playerTransform == null || _playerDamageable == null || _health.IsDead) return;
+        if (_playerTransform == null || _playerDamageable == null || _healthData.IsDead) return;
 
         float distanceToPlayer = Vector3.Distance(transform.position, _playerTransform.position);
 

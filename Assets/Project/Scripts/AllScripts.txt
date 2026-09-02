@@ -1,0 +1,968 @@
+﻿
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\Armor.cs
+// ================================
+
+using System;
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Combat
+{
+    public class Armor : MonoBehaviour, IArmor
+    {
+        [Header("Armor Settings")]
+        [SerializeField] private int _maxArmor = 100;
+
+        [Range(0f, 1f)]
+        [Tooltip("Percentage of incomming damage that is absorbed by the armor before breaking (e.g., 0.7 means 70% absorbed, 30% goes directly to HP")]
+        [SerializeField] private float _absorptionRate = 0.75f;
+
+        [Header("Flat Resistance")]
+        [Tooltip("Flat damage reduction deducted before absorption calculations")]
+        [SerializeField] private int _flatDamageReduction = 2;
+
+        private int _currentArmor;
+
+        // Event for UI and audio triggers
+        public event Action<int, int> OnArmorChanged; // (current, max)
+        public event Action OnArmorBroken;
+
+        public int CurrentArmor => _currentArmor;
+        public int MaxArmor => _maxArmor;
+
+        private void Awake()
+        {
+            _currentArmor = _maxArmor;
+        }
+
+        public int MitigateDamage(DamageInfo info)
+        {
+            // If armor is fully depleted, 100% of damage goes to health
+            if (_currentArmor <= 0)
+            {
+                return info.Amount;
+            }
+
+            // 1) Apply treshold reduction, (e.g., small caliber bullets deal less base damage)
+            int effectiveDamage = Mathf.Max(1, info.Amount - _flatDamageReduction);
+
+            // 2) Calculate how much damage armor atempts to absorb vs how much damage goes to HP
+            int damageToArmor = Mathf.RoundToInt(effectiveDamage * _absorptionRate);
+            int passingDamage = effectiveDamage - damageToArmor;
+
+            // 3) Substract from current armor pool
+            if (_currentArmor >= damageToArmor)
+            {
+                _currentArmor -= damageToArmor;
+            }
+            else
+            {
+                // Armor is depleted, remaining damage goes to health
+                int leftoverDamage = damageToArmor - _currentArmor;
+                passingDamage += leftoverDamage;
+                _currentArmor = 0;
+                OnArmorBroken?.Invoke();
+            }
+
+            OnArmorChanged?.Invoke(CurrentArmor, _maxArmor);
+            return passingDamage;
+        }
+
+        public void RepairArmor(int amount)
+        {
+            if (amount <= 0 || _currentArmor >= _maxArmor) return;
+
+            _currentArmor = Mathf.Min(_maxArmor, _currentArmor + amount);
+            OnArmorChanged?.Invoke(_currentArmor, _maxArmor);
+        }
+    }
+}
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\DamageInfo.cs
+// ================================
+
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Combat
+{
+    public readonly struct DamageInfo
+    {
+        public readonly int Amount;                     // Raw damage value
+        public readonly DamageType Type;                // Elemental, psysical, etc
+        public readonly GameObject Instigator;          // Atacker for kills life steal
+        public readonly Vector3 HitPoint;               // World position for hit effects
+        public readonly Vector3 HitNormal;              // Surface normal for decal alignment
+
+        public DamageInfo (int amount, DamageType type, GameObject instigator, Vector3 hitPoint, Vector3 hitNormal)
+        {
+            Amount = amount;
+            Type = type;
+            Instigator = instigator;
+            HitPoint = hitPoint;
+            HitNormal = hitNormal;
+        }
+    }
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\DamageType.cs
+// ================================
+
+namespace Assets.Project.Scripts.Combat
+{
+    public enum DamageType    
+    {
+        Physical,
+        Magical,
+        Fire,
+        Ice,
+        Acid
+    }
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\Health.cs
+// ================================
+
+using System;
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Combat
+{
+    public class Health : MonoBehaviour, IDamageable
+    {
+        [Header("Health Settings")]
+        [SerializeField] private int _maxHealth = 100;
+        private int _currentHealth;
+
+        // Optional armor reference (cached via interface on Awake)
+        private IArmor _armor;
+
+        // Events for UI bars, sound effects, or destruction logic to listen to
+        public event Action<int, int> OnHealthChanged; // (current, max)
+        public event Action<DamageInfo> OnHitTaken; 
+        public event Action<GameObject> OnDeath;
+
+        public int CurrentHealth => _currentHealth;
+        public int MaxHealth => _maxHealth;
+        public bool IsDead { get; private set; }
+
+        private void Awake()
+        {
+            _currentHealth = _maxHealth;
+            // Automatically find an armor component on the same GameObject if it exists
+            _armor = GetComponent<IArmor>();
+        }
+
+        public void TakeDamage(DamageInfo info)
+        {
+            if (IsDead || info.Amount <=0) return;
+
+            // 1) Filter damage through armor if available
+            int finalDamage = _armor != null ? _armor.MitigateDamage(info) : info.Amount;
+
+            // 2) Apply the final damage to health
+            _currentHealth = Mathf.Max(0, _currentHealth - finalDamage);
+
+            // 3) Notify listeners (ui, vfx, sound, etc.)
+            OnHitTaken?.Invoke(info);
+            OnHealthChanged?.Invoke(_currentHealth, _maxHealth);
+
+            //// 4) Check for death
+            //if (_currentHealth <= 0)
+            //{
+            //    Die(info.Instigator);
+            //}
+        }
+
+        public void Die(GameObject attacker = null)
+        {
+            if (IsDead) return;
+            IsDead = true;
+
+            //OnDeath?.Invoke(attacker);
+            //gameObject.SetActive(false); // Optional: disable the GameObject on death
+        }
+
+        public void Heal(int amount, bool allowOverheal = false)
+        {
+            if (IsDead || amount <= 0) return;
+
+            _currentHealth += amount;
+            if (!allowOverheal && _currentHealth > _maxHealth)
+            {
+                _currentHealth = _maxHealth;
+            }
+
+            OnHealthChanged?.Invoke(_currentHealth, _maxHealth);
+        }
+    }
+}
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\IArmor.cs
+// ================================
+
+namespace Assets.Project.Scripts.Combat
+{
+    public interface IArmor
+    {
+        // Return final damage after armor mitigation
+        int MitigateDamage(DamageInfo damageInfo);
+        void RepairArmor(int amount);
+
+        // Current armor values for UI display
+        int CurrentArmor { get; }
+        int MaxArmor { get; }
+    }
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\IDamageable.cs
+// ================================
+
+namespace Assets.Project.Scripts.Combat
+{ 
+    public interface IDamageable
+    {
+        void TakeDamage(DamageInfo info);
+    }
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Core\EnemySpawner.cs
+// ================================
+
+using Assets.Project.Scripts.Enemy;
+using UnityEngine;
+using UnityEngine.Pool;
+
+namespace Assets.Project.Scripts.Core
+{
+    public class EnemySpawner : MonoBehaviour
+    {
+        [SerializeField] private EnemyPoolHandler _enemyPrefab;
+        [SerializeField] private int _defaultCapacity = 20;
+        [SerializeField] private int _maxPoolSize = 50;
+
+        private IObjectPool<EnemyPoolHandler> _enemyPool;
+
+        private void Awake()
+        {
+            // Enemy pool initialization    
+            _enemyPool = new ObjectPool<EnemyPoolHandler>(
+                createFunc: () => Instantiate(_enemyPrefab),
+                actionOnGet: enemy => enemy.gameObject.SetActive(true),
+                actionOnRelease: enemy => enemy.gameObject.SetActive(false),
+                actionOnDestroy: enemy => Destroy(enemy.gameObject),
+                collectionCheck: false,
+                defaultCapacity: _defaultCapacity,
+                maxSize: _maxPoolSize
+            );
+        }
+
+        public void SpawnEnemy(Vector3 spawnPosition)
+        {
+            EnemyPoolHandler enemy = _enemyPool.Get();
+            enemy.transform.position = spawnPosition;
+            enemy.Initialize(_enemyPool);
+        }
+    }
+    
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Core\TopDownCameraFollow.cs
+// ================================
+
+using UnityEngine;
+
+public class TopDownCameraFollow : MonoBehaviour
+{
+    [Header("Tracking Target")]
+    [SerializeField] private Transform _target;
+
+    [Header("Position & Offset")]
+    [SerializeField] private Vector3 _offset = new (0f, 15f, -8f);
+    [SerializeField] private float _smoothSpeed = 5f;
+
+    private void LateUpdate()
+    {
+        if (_target == null) return;
+
+        // 1) Calculate the desired position based on the target's position and the offset
+        Vector3 desiredPosition = _target.position + _offset;
+
+        // 2) Smoothly interpolate the camera's position towards the desired position
+        transform.position = Vector3.Lerp(
+            transform.position,
+            desiredPosition,
+            _smoothSpeed * Time.deltaTime
+            );
+
+        // 3) Keep camera pointed at the target
+        // transform.LookAt(_target.position);
+    }
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Enemy\EnemyController.cs
+// ================================
+
+using UnityEngine;
+using Assets.Project.Scripts.Enemy;
+using Assets.Project.Scripts.Combat;
+
+[RequireComponent(typeof(EnemyMovement))]
+[RequireComponent(typeof(Health))]
+[RequireComponent(typeof(EnemyMeleeAttack))]
+public class EnemyController : MonoBehaviour
+{
+    private EnemyMovement _movement;
+    private EnemyMeleeAttack _attack;
+    private Health _health;
+    private Transform _playerTransform;
+    private IDamageable _playerDamageable;
+
+    private void Awake()
+    {
+        _movement = GetComponent<EnemyMovement>();
+        _attack = GetComponent<EnemyMeleeAttack>();
+        _health = GetComponent<Health>();   
+    }
+
+    public void Start()
+    {
+        var player = GameObject.FindGameObjectWithTag("Player");
+        if (player != null)   
+        {
+            _playerTransform = player.transform;
+            _playerDamageable = player.GetComponent<IDamageable>();
+        }
+    }
+
+    // If a player within range, stop and attack
+    private void Update()
+    {
+        if (_playerTransform == null || _playerDamageable == null || _health.IsDead) return;
+
+        float distanceToPlayer = Vector3.Distance(transform.position, _playerTransform.position);
+
+        if (_attack.CanAttack(distanceToPlayer) && _playerDamageable != null)
+        {
+            _movement.Stop();
+            _attack.Attack(_playerDamageable);
+        }
+        else
+        {
+            _movement.Resume();
+            _movement.MoveTowards(_playerTransform.position);
+        }
+    }
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Enemy\EnemyMeleeAttack.cs
+// ================================
+
+using UnityEngine;
+using Assets.Project.Scripts.Combat;
+
+public class EnemyMeleeAttack : MonoBehaviour
+{
+    [SerializeField] private int _damage = 10;
+    [SerializeField] private float _cooldown = 1.0f;
+    [SerializeField] private float _range = 1.2f;
+    [SerializeField] private DamageType _damageType = DamageType.Physical;
+
+    private float _lastAttackTime;
+
+    public float AttackRange => _range;
+
+    // Throttling attacks to prevent spamming
+    public bool CanAttack(float distanceToTarget)
+    {
+        return distanceToTarget <= _range && Time.time >= _lastAttackTime + _cooldown;
+    }
+
+    public void Attack(IDamageable target)
+    {
+        _lastAttackTime = Time.time;
+
+        DamageInfo info = new(
+            _damage,
+            _damageType,
+            gameObject,
+            transform.position,
+            Vector3.up
+            );
+
+        target.TakeDamage(info);
+    }
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Enemy\EnemyMovement.cs
+// ================================
+
+using UnityEngine;
+using UnityEngine.AI;
+
+namespace Assets.Project.Scripts.Enemy
+{
+    [RequireComponent(typeof(NavMeshAgent))]
+    public class EnemyMovement : MonoBehaviour
+    {
+        [SerializeField] private float _pathUpdateInterval = 0.2f;
+        private NavMeshAgent _agent;
+        private float _nextPathUpdateTime;
+
+        public NavMeshAgent Agent => _agent;
+
+        private void Awake()
+        {
+            _agent = GetComponent<NavMeshAgent>();
+        }
+
+        // Throttling pathfinding updates to improve performance
+        public void MoveTowards (Vector3 destination)
+        {
+            if (!_agent.enabled || _agent.isStopped) return;
+
+            if (Time.time >= _nextPathUpdateTime)
+            {
+                _nextPathUpdateTime = Time.time + _pathUpdateInterval;
+                _agent.SetDestination(destination);
+            }
+        }
+
+        public void Stop()
+        {
+            if (_agent.enabled) _agent.isStopped = true;
+        }
+
+        public void Resume()
+        {
+            if (_agent.enabled) _agent.isStopped = false;
+        }
+    }
+}
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Enemy\EnemyPoolHandler.cs
+// ================================
+
+using Assets.Project.Scripts.Combat;
+using UnityEngine;
+using UnityEngine.AI;
+using UnityEngine.Pool;
+
+namespace Assets.Project.Scripts.Enemy
+{
+    [RequireComponent(typeof(Health))]
+    [RequireComponent(typeof(NavMeshAgent))]
+    public class EnemyPoolHandler : MonoBehaviour
+    {
+        private Health _health;
+        private NavMeshAgent _agent;
+        private IArmor _armor;
+        private Collider _collider;
+        private IObjectPool<EnemyPoolHandler> _originatingPool;
+
+        private void Awake()
+        {
+            _agent = GetComponent<NavMeshAgent>();
+            _collider = GetComponent<Collider>();
+            _health = GetComponent<Health>();
+            _armor = GetComponent<IArmor>();
+        }
+
+        private void OnEnable()
+        {
+            // 1) Subscribe to death event from Health component
+            _health.OnDeath += HandleDeath;
+
+            // 2) Restore physics and navigation state when pulled from pool
+            if (_collider != null) _collider.enabled = true;
+            if (_agent != null)
+            {
+                _agent.enabled = true;
+                _agent.isStopped = false;
+            }
+        }
+
+        private void OnDisable()
+        {
+            // Unsubscribe to avoid memory leaks
+            _health.OnDeath -= HandleDeath;
+        }
+
+        /// <summary>
+        /// Called by the Spawener when pulling this enemy out of the pool.
+        /// </summary>
+        public void Initialize(IObjectPool<EnemyPoolHandler> pool)
+        {
+            _originatingPool = pool;
+
+            // Reset health and armor pools to full capacity
+            if (_armor != null)
+            {
+                _armor.RepairArmor(_armor.MaxArmor);
+            }
+            _health.Heal(_health.MaxHealth);
+        }
+
+        private void HandleDeath(GameObject attacker)
+        {
+            // 1) Instantly stops AI and disable collision so bullets player can pass through
+            if (_agent != null && _agent.isOnNavMesh)
+            {
+                _agent.isStopped = true;
+                _agent.enabled = false;
+            }
+
+            if (_collider != null)
+            {
+                _collider.enabled = false;
+            }
+
+            // 2) Release back to poo or deactivate fallback
+            if (_originatingPool != null)
+            {
+                _originatingPool.Release(this);
+            }
+            else
+            {
+                gameObject.SetActive(false);
+            }
+        }
+    }
+}
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Player\PlayerController.cs
+// ================================
+
+using Unity.VisualScripting;
+using UnityEngine;
+using Assets.Project.Scripts.Weapons;
+
+[RequireComponent(typeof(Rigidbody))]
+public class PlayerController : MonoBehaviour
+{
+    [Header("Movement Settings")]
+    [SerializeField] private float _moveSpeed = 8f;
+
+    [Header("Aim Settings")]
+    [SerializeField] private LayerMask _aimLayerMask;
+
+    [Header("Weapon Attachment")]
+    [SerializeField] private WeaponController _weaponController;
+
+    private Rigidbody _rigidbody;
+    private Camera _mainCamera;
+    private Vector3 _movementInput;
+    private Vector3 _lookTarget;
+
+    private void Awake()
+    {
+        _rigidbody = GetComponent<Rigidbody>();
+        _mainCamera = Camera.main;
+
+        // Enable physics interpolation for smoother movement
+        _rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+
+        // Configure physics properties for responsive arcade control
+        _rigidbody.useGravity = false;
+        _rigidbody.constraints = RigidbodyConstraints.FreezePositionY |
+            RigidbodyConstraints.FreezeRotationX |
+            RigidbodyConstraints.FreezeRotationZ;
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        GatherInput();
+        CalculateAimDirection();
+        HandleFiringInput();
+    }
+
+    private void FixedUpdate()
+    {
+        MovePlayer();
+        RotatePlayer();
+    }
+
+    private void GatherInput()
+    {
+        float horizontal = Input.GetAxisRaw("Horizontal");
+        float vertical = Input.GetAxisRaw("Vertical");
+
+        // Map 2D inputs to the 3D XZ ground plane and normalize
+        _movementInput = new Vector3(horizontal, 0f, vertical).normalized;
+    }
+
+    private void CalculateAimDirection()
+    {
+        if (_mainCamera == null) return;
+
+        Ray ray = _mainCamera.ScreenPointToRay(Input.mousePosition);
+        Plane groundPlane = new (Vector3.up, new Vector3(0f, transform.position.y, 0f));
+
+        if (groundPlane.Raycast(ray, out float enterDistance))
+        {
+            _lookTarget = ray.GetPoint(enterDistance);
+            _lookTarget.y = transform.position.y; // Keep rotation level on the horizontal plan
+        }
+    }
+
+    private void HandleFiringInput()
+    {
+        // Continuous fire when holding left click
+        if (Input.GetMouseButton(0) && _weaponController != null)
+        {
+            _weaponController.TryShoot();
+        }
+    }
+
+    private void MovePlayer()
+    {
+        Vector3 targetVelocity = _movementInput * _moveSpeed;
+        _rigidbody.linearVelocity = new Vector3(targetVelocity.x, 0f, targetVelocity.z);
+    }
+
+    private void RotatePlayer()
+    {
+        Vector3 directionToTarget = _lookTarget - transform.position;
+        directionToTarget.y = 0f; // Keep rotation level on the horizontal plane
+
+        if (directionToTarget.sqrMagnitude > 0.001f)
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(directionToTarget, Vector3.up);
+            _rigidbody.MoveRotation(targetRotation);
+        }
+    }
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Player\PlayerInputHandler.cs
+// ================================
+
+using UnityEngine;
+
+public class PlayerInputHandler : MonoBehaviour
+{
+    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    void Start()
+    {
+        
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        
+    }
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Player\PlayerMovement.cs
+// ================================
+
+using UnityEngine;
+
+public class PlayerMovement : MonoBehaviour
+{
+    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    void Start()
+    {
+        
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        
+    }
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Player\PlayerWeaponController.cs
+// ================================
+
+using UnityEngine;
+
+public class PlayerWeaponController : MonoBehaviour
+{
+    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    void Start()
+    {
+        
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        
+    }
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Weapons\Projectile.cs
+// ================================
+
+using UnityEngine;
+using UnityEngine.Pool;
+using Assets.Project.Scripts.Combat;
+
+namespace Assets.Project.Scripts.Weapons
+{
+    [RequireComponent(typeof(Collider))]
+    public class Projectile : MonoBehaviour
+    {
+        [Header("Projectile Base Settings")]
+        [SerializeField] private DamageType _damageType = DamageType.Physical;
+
+        private float _timer;
+        private GameObject _instigator;
+        private IObjectPool<Projectile> _pool;
+        private WeaponData _weaponData;
+
+        // Called when spawned from object pool or instantiated
+        public void Initialize(WeaponData data, GameObject instigator, IObjectPool<Projectile> originatingPool)
+        {
+            _weaponData = data;
+            _pool = originatingPool;
+            _instigator = instigator;
+        }
+
+        private void OnEnable()
+        {
+            // Resets timer automatically every time a bullet leaves the pool
+            _timer = 0f;
+        }
+
+        private void Update()
+        {
+            if (_weaponData == null) return;
+
+            // 1. Move forward smothly based on speed and deltaTime
+            transform.position += transform.forward * (_weaponData.bulletSpeed * Time.deltaTime);
+
+            // 2. Track lifetime and rycle when expired
+            _timer += Time.deltaTime;
+            if (_timer >= _weaponData.bulletLifetime)
+            {
+                Release();
+            }
+        }
+
+        private void OnTriggerEnter(Collider other)
+        {
+            Debug.Log($"[1) HIT DETECTED] Bullet hit: {other.gameObject.name}");
+            // Ignore the shooter who fired the projectile
+            if (_instigator != null && other.gameObject == _instigator) return;
+
+            // Deliever damage via IDemagable
+            if (other.TryGetComponent<IDamageable>(out var target))
+            {
+                // Find a point on collider surface closest to the projectile's position on hit
+                Vector3 hitPoint = other.ClosestPoint(transform.position);
+                Vector3 hitNormal = (transform.position - hitPoint).normalized;
+
+                DamageInfo hitInfo = new(
+                    _weaponData.damage,
+                    _weaponData.damageType,
+                    _instigator,
+                    hitPoint,
+                    hitNormal
+                );
+
+                target.TakeDamage(hitInfo);
+
+                Release();
+            }
+            else if(!other.isTrigger)
+            {
+                // If the projectile hits a non-damageable object, it should still despawn
+                Release();
+            }
+        }
+
+        // Called when the projectile's lifetime expires or it hits a target
+        private void Release()
+        {
+            if (_pool != null)
+                _pool.Release(this);
+            else
+                gameObject.SetActive(false);
+        }
+    }
+}
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Weapons\WeaponController.cs
+// ================================
+
+using UnityEngine;
+using UnityEngine.Pool;
+
+namespace Assets.Project.Scripts.Weapons
+{
+    /// <summary>
+    /// WeaponController is responsible for managing the firing of projectiles.
+    /// It uses an object pool to efficiently reuse projectile instances.
+    /// </summary>
+    public class WeaponController : MonoBehaviour
+    {
+        [Header("WeaponSetup")]
+        [SerializeField] private WeaponData _weaponData;
+        [SerializeField] private Transform _firePoint;
+
+        // Timer tracing the excact game time when the next round can be fired
+        private float _nextFireTime = 0f;
+
+        // Interface to Unity generic object pool
+        private IObjectPool<Projectile> _projectilePool;
+
+        private void Awake()
+        {
+            // 1) Initialize the object poo
+            // We Configure 4 functional callbacks (create, get, release, destroy)
+            _projectilePool = new ObjectPool<Projectile>(
+                createFunc: CreateProjectile,
+                actionOnGet: OnGetFromPool,
+                actionOnRelease: OnReleaseToPool,
+                actionOnDestroy: OnDestroyPoolObject,
+                collectionCheck: false, // Set to false in release builds for max speed
+                defaultCapacity: 20, // Pre-allocates memory for 20 projectiles
+                maxSize: 100 // Hard ceilling to prevent runaway memory usage
+                );
+        }
+
+        // Callback 1: How to spawn a brand new projectile when the pool is completely empty
+        private Projectile CreateProjectile()
+        {
+            if (_weaponData == null || _weaponData.bulletPrefab == null)
+            {
+                Debug.LogError("WeaponData or Projectile is missing on WeaponController!", this);
+                return null;
+            }
+
+            return Instantiate(_weaponData.bulletPrefab);
+        }
+
+        // Callback 2: What to do when grabbing a bullet out of standby
+        private void OnGetFromPool(Projectile projectile)
+        {
+            projectile.gameObject.SetActive(true);
+        }
+
+        // Callback 3: What to do when a bullet hits the target or expires
+        private void OnReleaseToPool(Projectile projectile)
+        {
+            projectile.gameObject.SetActive(false);
+        }
+
+        // Callback 4: What to do if the pool exceeds maximum size
+        private void OnDestroyPoolObject(Projectile projectile)
+        {
+            Destroy(projectile.gameObject);
+        }
+
+        /// <summary>
+        /// Attempts to fire the weapon based on fireRate cadence.
+        /// Can be called ontinously in update by player or AI.
+        /// </summary>
+        public void TryShoot()
+        {
+            // Guard Clause: Prevent firing if on cooldown or if no weapon is equipped
+            if (_weaponData == null || Time.time < _nextFireTime) return;
+
+            // Calculate next allowed firing timestamp
+            _nextFireTime = Time.time + _weaponData.fireRate;
+
+            ExecuteShot();
+        }
+
+        private void ExecuteShot()
+        {
+            Projectile bullet = _projectilePool.Get();
+            if (bullet == null) return;
+
+            // 1. Calculate random spread deviation on the Ordinate axis (horizontal sweep)
+            float randomSpread = Random.Range(-_weaponData.spreadAngle, _weaponData.spreadAngle);
+            Quaternion spreadRotation = Quaternion.Euler(0f, randomSpread, 0f);
+
+            // 2. Position the bullet at the muzzle and rotate it towards the aim direction + spread
+            // bullet.transform.position = _firePoint.position;
+            // bullet.transform.rotation = _firePoint.rotation * spreadRotation;
+            bullet.transform.SetPositionAndRotation(_firePoint.position, _firePoint.rotation * spreadRotation);
+
+            // 3. Initiate speed, damage, and assign the pool reference for recycling
+            bullet.Initialize(_weaponData, gameObject, _projectilePool);
+        }
+    }
+}
+
+
+
+// ================================
+// FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Weapons\WeaponData.cs
+// ================================
+
+using UnityEngine;
+using Assets.Project.Scripts.Combat;
+
+namespace Assets.Project.Scripts.Weapons
+{
+    [CreateAssetMenu(fileName = "NewWeaponData", menuName = "Combat/Weapon Data")]
+
+    public class WeaponData : ScriptableObject
+    {
+        [Header("Display Info")]
+        public string weaponName = "Vanguard Heavy Rifle";
+
+        [Header("Combat Stats")]
+        public float fireRate = 0.12f;
+        public int damage = 25;
+        public DamageType damageType = DamageType.Physical;
+        public float bulletSpeed = 35f;
+        public float bulletLifetime = 2f;
+        public float spreadAngle = 2f;
+
+        [Header("Prefab Reference")]
+        public Projectile bulletPrefab;
+    }
+}

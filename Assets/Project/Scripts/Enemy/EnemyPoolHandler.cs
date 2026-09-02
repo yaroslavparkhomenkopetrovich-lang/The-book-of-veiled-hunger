@@ -5,13 +5,13 @@ using UnityEngine.Pool;
 
 namespace Assets.Project.Scripts.Enemy
 {
-    [RequireComponent(typeof(Health))]
+    [RequireComponent(typeof(HealthData))]
     [RequireComponent(typeof(NavMeshAgent))]
     public class EnemyPoolHandler : MonoBehaviour
     {
-        private Health _health;
+        private HealthData _healthData;
         private NavMeshAgent _agent;
-        private IArmor _armor;
+        private ArmorData _armorData;
         private Collider _collider;
         private IObjectPool<EnemyPoolHandler> _originatingPool;
 
@@ -19,14 +19,14 @@ namespace Assets.Project.Scripts.Enemy
         {
             _agent = GetComponent<NavMeshAgent>();
             _collider = GetComponent<Collider>();
-            _health = GetComponent<Health>();
-            _armor = GetComponent<IArmor>();
+            _healthData = GetComponent<HealthData>();
+            _armorData = GetComponent<ArmorData>();
         }
 
         private void OnEnable()
         {
             // 1) Subscribe to death event from Health component
-            _health.OnDeath += HandleDeath;
+            _healthData.OnDeath += HandleDeath;
 
             // 2) Restore physics and navigation state when pulled from pool
             if (_collider != null) _collider.enabled = true;
@@ -40,7 +40,7 @@ namespace Assets.Project.Scripts.Enemy
         private void OnDisable()
         {
             // Unsubscribe to avoid memory leaks
-            _health.OnDeath -= HandleDeath;
+            _healthData.OnDeath -= HandleDeath;
         }
 
         /// <summary>
@@ -51,11 +51,15 @@ namespace Assets.Project.Scripts.Enemy
             _originatingPool = pool;
 
             // Reset health and armor pools to full capacity
-            if (_armor != null)
+            if (_armorData != null)
             {
-                _armor.RepairArmor(_armor.MaxArmor);
+                _armorData.CurrentArmor = _armorData.MaxArmor;
+                _armorData.NotifyChanged();
             }
-            _health.Heal(_health.MaxHealth);
+
+            // Reset health
+            _healthData.CurrentHealth = _healthData.MaxHealth;
+
         }
 
         private void HandleDeath(GameObject attacker)
