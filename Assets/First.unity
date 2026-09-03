@@ -165,7 +165,6 @@ GameObject:
   - component: {fileID: 1064472664}
   - component: {fileID: 1064472663}
   - component: {fileID: 1064472662}
-  - component: {fileID: 1064472661}
   - component: {fileID: 1064472660}
   - component: {fileID: 1064472659}
   - component: {fileID: 1064472658}
@@ -312,21 +311,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Enemy.EnemyMovement
   _pathUpdateInterval: 0.2
---- !u!114 &1064472661
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1064472651}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3551bab04717153419f5bb8de266ad92, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.Armor
-  _maxArmor: 100
-  _absorptionRate: 0.75
-  _flatDamageReduction: 2
 --- !u!114 &1064472662
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -374,6 +358,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.Health
   _maxHealth: 100
+  _maxOverhealth: 150
+  _isInvulnerable: 0
+  _canRegenerate: 0
+  _regenAmountPerTick: 2
+  _regenTickInterval: 1
+  _regenDelayAfterDamage: 3
 --- !u!1 &1234582358
 GameObject:
   m_ObjectHideFlags: 0
@@ -410,6 +400,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.Health
   _maxHealth: 100
+  _maxOverhealth: 150
+  _isInvulnerable: 0
+  _canRegenerate: 0
+  _regenAmountPerTick: 2
+  _regenTickInterval: 1
+  _regenDelayAfterDamage: 3
 --- !u!114 &1234582360
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -698,7 +694,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   m_UseGeometry: 0
-  m_DefaultArea: 0
+  m_DefaultArea: 3
   m_GenerateLinks: 0
   m_IgnoreNavMeshAgent: 1
   m_IgnoreNavMeshObstacle: 1
