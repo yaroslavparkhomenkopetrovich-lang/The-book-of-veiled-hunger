@@ -17,7 +17,6 @@ namespace Assets.Project.Scripts.Combat
         public void TakeDamage(DamageInfo info)
         {
             if (info.Amount <= 0) return;
-
             int damageToHealth = info.Amount;
 
             // 1) Mitigate through armor if present

@@ -33,5 +33,4 @@ namespace Assets.Project.Scripts.Core
             enemy.Initialize(_enemyPool);
         }
     }
-    
 }

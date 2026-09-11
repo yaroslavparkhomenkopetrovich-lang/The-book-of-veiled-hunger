@@ -168,6 +168,10 @@ GameObject:
   - component: {fileID: 1064472660}
   - component: {fileID: 1064472659}
   - component: {fileID: 1064472658}
+  - component: {fileID: 1064472666}
+  - component: {fileID: 1064472665}
+  - component: {fileID: 1064472668}
+  - component: {fileID: 1064472667}
   m_Layer: 0
   m_Name: Fire1
   m_TagString: Untagged
@@ -364,6 +368,57 @@ MonoBehaviour:
   _regenAmountPerTick: 2
   _regenTickInterval: 1
   _regenDelayAfterDamage: 3
+--- !u!114 &1064472665
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1064472651}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a0cbae3502b0fef449d1e335c513ea1b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.DamageReceiver
+--- !u!114 &1064472666
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1064472651}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e42693d728bfc5945b25de22dfedccbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.DamageProcessor
+--- !u!114 &1064472667
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1064472651}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d55b5ed05df600c49bd5571a01d97993, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.ArmorProcessor
+--- !u!114 &1064472668
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1064472651}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9990333e52caabb498fdf14c4a8bf66e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.ArmorData
+  _maxArmor: 100
+  _absorptionRate: 0.75
+  _flatDamageReduction: 2
 --- !u!1 &1234582358
 GameObject:
   m_ObjectHideFlags: 0
@@ -380,6 +435,8 @@ GameObject:
   - component: {fileID: 1234582361}
   - component: {fileID: 1234582360}
   - component: {fileID: 1234582359}
+  - component: {fileID: 1234582368}
+  - component: {fileID: 1234582367}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -560,6 +617,30 @@ Transform:
   - {fileID: 860098240}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1234582367
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1234582358}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a0cbae3502b0fef449d1e335c513ea1b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.DamageReceiver
+--- !u!114 &1234582368
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1234582358}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e42693d728bfc5945b25de22dfedccbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.DamageProcessor
 --- !u!1 &1649217436
 GameObject:
   m_ObjectHideFlags: 0
