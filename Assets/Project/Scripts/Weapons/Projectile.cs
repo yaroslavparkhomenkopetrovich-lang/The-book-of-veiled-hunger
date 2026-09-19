@@ -8,8 +8,6 @@ namespace Assets.Project.Scripts.Weapons
     public class Projectile : MonoBehaviour
     {
         [Header("Projectile Base Settings")]
-        [SerializeField] private DamageType _damageType = DamageType.Physical;
-
         private float _timer;
         private GameObject _instigator;
         private IObjectPool<Projectile> _pool;
@@ -34,11 +32,11 @@ namespace Assets.Project.Scripts.Weapons
             if (_weaponData == null) return;
 
             // 1. Move forward smothly based on speed and deltaTime
-            transform.position += transform.forward * (_weaponData.bulletSpeed * Time.deltaTime);
+            transform.position += transform.forward * (_weaponData.BulletSpeed * Time.deltaTime);
 
             // 2. Track lifetime and rycle when expired
             _timer += Time.deltaTime;
-            if (_timer >= _weaponData.bulletLifetime)
+            if (_timer >= _weaponData.BulletLifetime)
             {
                 Release();
             }
@@ -57,12 +55,12 @@ namespace Assets.Project.Scripts.Weapons
                 Vector3 hitPoint = other.ClosestPoint(transform.position);
                 Vector3 hitNormal = (transform.position - hitPoint).normalized;
 
-                DamageInfo hitInfo = new(
-                    _weaponData.damage,
-                    _weaponData.damageType,
+                DamageInfo hitInfo = DamageInfo.FromProjectile(
+                    _weaponData,
                     _instigator,
                     hitPoint,
-                    hitNormal
+                    hitNormal,
+                    transform.forward
                 );
 
                 target.TakeDamage(hitInfo);

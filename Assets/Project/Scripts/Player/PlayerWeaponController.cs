@@ -28,7 +28,7 @@ namespace Assets.Project.Scripts.Player
                 return;
             }
 
-            if (Time.time >= _lastFireTime + _weaponData.fireRate)
+            if (Time.time >= _lastFireTime + _weaponData.FireInterval)
             {
                 _lastFireTime = Time.time;
                 _projectileSpawner.SpawnProjectile(_firePoint.position, _firePoint.rotation, _weaponData, gameObject);

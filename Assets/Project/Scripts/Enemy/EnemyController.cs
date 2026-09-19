@@ -35,6 +35,11 @@ public class EnemyController : MonoBehaviour
     {
         if (_playerTransform == null || _playerDamageable == null || _healthData.IsDead) return;
 
+        if (_movement.IsStunned)
+            return;
+
+
+
         float distanceToPlayer = Vector3.Distance(transform.position, _playerTransform.position);
 
         if (_attack.CanAttack(distanceToPlayer) && _playerDamageable != null)

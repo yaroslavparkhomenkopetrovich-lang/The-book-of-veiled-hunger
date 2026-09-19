@@ -37,13 +37,13 @@ namespace Assets.Project.Scripts.Weapons
         // Callback 1: How to spawn a brand new projectile when the pool is completely empty
         private Projectile CreateProjectile()
         {
-            if (_weaponData == null || _weaponData.bulletPrefab == null)
+            if (_weaponData == null || _weaponData.BulletPrefab == null)
             {
                 Debug.LogError("WeaponData or Projectile is missing on WeaponController!", this);
                 return null;
             }
 
-            return Instantiate(_weaponData.bulletPrefab);
+            return Instantiate(_weaponData.BulletPrefab);
         }
 
         // Callback 2: What to do when grabbing a bullet out of standby
@@ -74,7 +74,7 @@ namespace Assets.Project.Scripts.Weapons
             if (_weaponData == null || Time.time < _nextFireTime) return;
 
             // Calculate next allowed firing timestamp
-            _nextFireTime = Time.time + _weaponData.fireRate;
+            _nextFireTime = Time.time + _weaponData.FireInterval;
 
             ExecuteShot();
         }
@@ -85,7 +85,7 @@ namespace Assets.Project.Scripts.Weapons
             if (bullet == null) return;
 
             // 1. Calculate random spread deviation on the Ordinate axis (horizontal sweep)
-            float randomSpread = Random.Range(-_weaponData.spreadAngle, _weaponData.spreadAngle);
+            float randomSpread = Random.Range(-_weaponData.SpreadAngle, _weaponData.SpreadAngle);
             Quaternion spreadRotation = Quaternion.Euler(0f, randomSpread, 0f);
 
             // 2. Position the bullet at the muzzle and rotate it towards the aim direction + spread
