@@ -5,20 +5,59 @@ using UnityEngine.AI;
 namespace Assets.Project.Scripts.Enemy
 {
     [RequireComponent(typeof(NavMeshAgent))]
+    [RequireComponent(typeof(MovementAffector))]
     public class EnemyMovement : MonoBehaviour
     {
         [SerializeField] private float _pathUpdateInterval = 0.2f;
+
         private NavMeshAgent _agent;
+        private MovementAffector _movementAffector;
+
         private float _nextPathUpdateTime;
+        private float _baseSpeed;
+        private bool _wasStunned;
 
         public NavMeshAgent Agent => _agent;
-
-        private float _stunUntilTime;
-        public bool IsStunned => Time.time < _stunUntilTime;
+        public bool IsStunned => _movementAffector != null && _movementAffector.IsStunned;
 
         private void Awake()
         {
             _agent = GetComponent<NavMeshAgent>();
+            _movementAffector = GetComponent<MovementAffector>();
+            _baseSpeed = _agent.speed;
+        }
+
+        private void Update()
+        {
+            ApplyMovementModifiers();
+        }
+
+        private void ApplyMovementModifiers()
+        {
+            if (_movementAffector == null || !_agent.enabled) return;
+
+            _agent.speed = _baseSpeed * _movementAffector.SpeedMultiplier;
+
+            bool stunned = _movementAffector.IsStunned;
+
+            if (stunned)
+            {
+                _agent.isStopped = true;
+            }
+            else if (_wasStunned)
+            {
+                // Stun ended
+                _agent.isStopped = false;
+            }
+
+            _wasStunned = stunned;
+
+            if (_movementAffector.HasKnockback)
+            {
+                _agent.Move(_movementAffector.KnockbackVelocity * Time.deltaTime);
+                _movementAffector.TickKnockback(Time.deltaTime);
+            }
+
         }
 
         // Throttling pathfinding updates to improve performance
@@ -42,27 +81,6 @@ namespace Assets.Project.Scripts.Enemy
         {
             if (_agent.enabled && !IsStunned)
                 _agent.isStopped = false;
-        }
-
-        ///<summary>
-        /// Stage 1) stub: apply short hit stun + knockback
-        /// Stage 2) will move this responsibility to MovementAffector.
-        /// </summary>
-        public void ApplyHitImpulse(ImpulseResult impulse)
-        {
-            if (impulse.StunDuration > 0f)
-            {
-                _stunUntilTime = Mathf.Max(_stunUntilTime, Time.time + impulse.StunDuration);
-                Stop();
-            }
-
-            if (impulse.Force > 0f
-                && impulse.Direction.sqrMagnitude > 0.001f
-                && _agent != null
-                && _agent.enabled)
-            {
-                _agent.Warp(transform.position + impulse.Direction.normalized * impulse.Force);
-            }
-        }
+        }      
     }
 }

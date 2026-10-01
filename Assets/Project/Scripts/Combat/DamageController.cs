@@ -3,17 +3,21 @@ using UnityEngine;
 namespace Assets.Project.Scripts.Combat
 {
     [RequireComponent(typeof(DamageProcessor))]
+    [RequireComponent(typeof(MovementAffector))]
+    [RequireComponent(typeof(ImpulseProcessor))]
     public class DamageController : MonoBehaviour, IDamageable
     {
         private DamageProcessor _damageProcessor;
         private ArmorProcessor _armorProcessor;
         private ImpulseProcessor _impulseProcessor;
+        private MovementAffector _movementAffector;
 
         private void Awake()
         {
             _damageProcessor = GetComponent<DamageProcessor>();
             _armorProcessor = GetComponent<ArmorProcessor>();
             _impulseProcessor = GetComponent<ImpulseProcessor>();
+            _movementAffector = GetComponent<MovementAffector>();
         }
 
         public void TakeDamage(DamageInfo info)
@@ -47,7 +51,7 @@ namespace Assets.Project.Scripts.Combat
 
         private void TryApplyHitImpulse(DamageInfo info)
         {
-            if (_impulseProcessor == null) return;
+            if (_impulseProcessor == null || _movementAffector == null) return;
 
             ImpulseResult impulse = _impulseProcessor.CalculateImpulse
                 (
@@ -59,13 +63,8 @@ namespace Assets.Project.Scripts.Combat
                 );
 
             if (impulse.Force <= 0f && impulse.StunDuration <= 0f) return;
-            // Stage 1 stub: direct enemy movement.
-            // Stage 2 can replace this with MovementAffector.
-            if (TryGetComponent<Enemy.EnemyMovement>(out var movement))
-            {
-                movement.ApplyHitImpulse(impulse);
-            }
-        }
 
+            _movementAffector.ApplyHitImpulse(impulse);
+        }
     }
 }

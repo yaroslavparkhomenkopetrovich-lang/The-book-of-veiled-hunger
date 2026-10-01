@@ -996,6 +996,8 @@ GameObject:
   - component: {fileID: 1064472665}
   - component: {fileID: 1064472668}
   - component: {fileID: 1064472667}
+  - component: {fileID: 1064472669}
+  - component: {fileID: 1064472670}
   m_Layer: 0
   m_Name: Fire1
   m_TagString: Untagged
@@ -1243,6 +1245,30 @@ MonoBehaviour:
   _maxArmor: 100
   _absorptionRate: 0.75
   _flatDamageReduction: 2
+--- !u!114 &1064472669
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1064472651}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21b890a930b8842419d03874206bd5d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.MovementAffector
+--- !u!114 &1064472670
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1064472651}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0214d8e49a6d15f47816436d8284e1b2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.ImpulseProcessor
 --- !u!1 &1072199082
 GameObject:
   m_ObjectHideFlags: 0
@@ -1380,6 +1406,8 @@ GameObject:
   - component: {fileID: 1234582371}
   - component: {fileID: 1234582370}
   - component: {fileID: 1234582372}
+  - component: {fileID: 1234582373}
+  - component: {fileID: 1234582374}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -1527,6 +1555,30 @@ CharacterController:
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &1234582373
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1234582358}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21b890a930b8842419d03874206bd5d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.MovementAffector
+--- !u!114 &1234582374
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1234582358}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0214d8e49a6d15f47816436d8284e1b2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Combat.ImpulseProcessor
 --- !u!1 &1474797293
 GameObject:
   m_ObjectHideFlags: 0
