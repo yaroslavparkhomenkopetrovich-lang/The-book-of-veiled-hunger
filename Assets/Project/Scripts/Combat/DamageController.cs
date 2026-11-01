@@ -1,3 +1,4 @@
+using Assets.Project.Scripts.Status;
 using UnityEngine;
 
 namespace Assets.Project.Scripts.Combat
@@ -5,12 +6,14 @@ namespace Assets.Project.Scripts.Combat
     [RequireComponent(typeof(DamageProcessor))]
     [RequireComponent(typeof(MovementAffector))]
     [RequireComponent(typeof(ImpulseProcessor))]
+    [RequireComponent(typeof(StatusEffectController))]
     public class DamageController : MonoBehaviour, IDamageable
     {
         private DamageProcessor _damageProcessor;
         private ArmorProcessor _armorProcessor;
         private ImpulseProcessor _impulseProcessor;
         private MovementAffector _movementAffector;
+        private StatusEffectController _statusEffectController;
 
         private void Awake()
         {
@@ -18,6 +21,8 @@ namespace Assets.Project.Scripts.Combat
             _armorProcessor = GetComponent<ArmorProcessor>();
             _impulseProcessor = GetComponent<ImpulseProcessor>();
             _movementAffector = GetComponent<MovementAffector>();
+            _statusEffectController = GetComponent<StatusEffectController>();
+
         }
 
         public void TakeDamage(DamageInfo info)
@@ -29,6 +34,8 @@ namespace Assets.Project.Scripts.Combat
             ApplyHealthDamage(damageToHealth, info.Instigator);
 
             TryApplyHitImpulse(info);
+
+            TryApplyStatusEffects(info);
         }
         private static bool CanReceiveHit(DamageInfo info)
         {
@@ -65,6 +72,13 @@ namespace Assets.Project.Scripts.Combat
             if (impulse.Force <= 0f && impulse.StunDuration <= 0f) return;
 
             _movementAffector.ApplyHitImpulse(impulse);
+        }
+
+        private void TryApplyStatusEffects(DamageInfo info)
+        {
+            if (_statusEffectController == null || !info.HasStatusEffect) return;
+
+                _statusEffectController.ApplyAllStatusEffects(info.StatusEffects);
         }
     }
 }

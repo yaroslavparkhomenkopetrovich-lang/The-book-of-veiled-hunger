@@ -73,6 +73,8 @@ namespace Assets.Project.Scripts.Combat
                 StatusEffectRequest[] statusEffects = null
             )
         {
+            statusEffects = StatusEffectRequestFactory.FromPayloads(weapon.OnHitEffects, instigator);
+            
             return new DamageInfo
             (
                 amount: weapon.Damage,
@@ -97,7 +99,7 @@ namespace Assets.Project.Scripts.Combat
                 Vector3 hitNormal = default,
                 float stunDuration = 0f,
                 float knockbackForce = 0f,
-                StatusEffectRequest[] statusEffects = null
+                StatusEffectPayload[] onHitEffects = null
             )
         {
             if (hitNormal == default)
@@ -115,7 +117,7 @@ namespace Assets.Project.Scripts.Combat
                     knockbackForce: knockbackForce,
                     impulseType: ImpulseType.PushAwayFromImpact,
                     source: DamageSource.DirectHit,
-                    statusEffects: statusEffects
+                    statusEffects: StatusEffectRequestFactory.FromPayloads(onHitEffects, attacker)
                 );
         }
 

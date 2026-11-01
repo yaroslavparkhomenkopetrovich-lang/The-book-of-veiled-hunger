@@ -1,5 +1,6 @@
 using UnityEngine;
 using Assets.Project.Scripts.Combat;
+using Assets.Project.Scripts.Status;
 
 public class EnemyMeleeAttack : MonoBehaviour
 {
@@ -7,6 +8,8 @@ public class EnemyMeleeAttack : MonoBehaviour
     [SerializeField] private float _cooldown = 1.0f;
     [SerializeField] private float _range = 1.2f;
     [SerializeField] private DamageType _damageType = DamageType.Physical;
+    [SerializeField] private StatusEffectPayload[] _onHitEffects;
+
 
     private float _lastAttackTime;
 
@@ -22,12 +25,13 @@ public class EnemyMeleeAttack : MonoBehaviour
     {
         _lastAttackTime = Time.time;
 
-        DamageInfo info = new(
+        DamageInfo info = DamageInfo.FromMelee(
             _damage,
             _damageType,
             gameObject,
             transform.position,
-            Vector3.up
+            Vector3.up,
+            onHitEffects: _onHitEffects
             );
 
         target.TakeDamage(info);

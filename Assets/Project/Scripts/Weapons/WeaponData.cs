@@ -1,6 +1,7 @@
 using UnityEngine;
 using Assets.Project.Scripts.Combat;
 using UnityEngine.Serialization;
+using Assets.Project.Scripts.Status;
 
 namespace Assets.Project.Scripts.Weapons
 {
@@ -44,6 +45,10 @@ namespace Assets.Project.Scripts.Weapons
         [Tooltip("Direction of push or pull")]
         [SerializeField] private ImpulseType _impulseKind = ImpulseType.PushAwayFromBullet;
         public ImpulseType ImpulseKind => _impulseKind;
+
+        [Header("On-Hit Status Effects")]
+        [SerializeField] private StatusEffectPayload[] _onHitEffects;
+        public StatusEffectPayload[] OnHitEffects => _onHitEffects;
 
         [Header("Prefab Reference")]
         [SerializeField] private Projectile _bulletPrefab;
