@@ -14,12 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Assets.Project.Scripts.Weapons.WeaponData
   _weaponName: Vanguard Heavy Rifle
   _fireInterval: 0.25
-  _damage: 15
-  _damageKind: 0
   _bulletSpeed: 35
   _bulletLifetime: 2
   _spreadAngle: 2
-  _stunDuration: 0.2
-  _knockbackForce: 2
-  _impulseKind: 0
   _bulletPrefab: {fileID: 0}
+  _hitEffects: {fileID: 11400000, guid: 2c47ade4b1f0ed44ab830e42fde3ae7a, type: 2}

@@ -11,12 +11,14 @@ namespace Assets.Project.Scripts.Player
         private PlayerInputHandler _inputHandler;
         private PlayerMovement _movement;
         private PlayerWeaponController _weaponController;
+        private PlayerMeleeAttack _meleeAttack;
 
         private void Awake()
         {
             _inputHandler = GetComponent<PlayerInputHandler>();
             _movement = GetComponent<PlayerMovement>();
             _weaponController = GetComponent<PlayerWeaponController>();
+            _meleeAttack = GetComponent<PlayerMeleeAttack>();
         }  
 
         // Update is called once per frame
@@ -30,6 +32,12 @@ namespace Assets.Project.Scripts.Player
             if (_inputHandler.IsFirePressed)
             {
                 _weaponController.TryFire();
+            }
+
+            // 3) Trigger melee attack in PlayerMeleeAttack
+            if (_inputHandler.IsMeleePressed)
+            {
+                _meleeAttack.TryAttack();
             }
         }
     }

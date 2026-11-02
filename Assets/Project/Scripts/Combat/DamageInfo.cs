@@ -73,20 +73,21 @@ namespace Assets.Project.Scripts.Combat
                 StatusEffectRequest[] statusEffects = null
             )
         {
-            statusEffects = StatusEffectRequestFactory.FromPayloads(weapon.OnHitEffects, instigator);
-            
+            var hit = weapon.HitEffects;
+            // If the weapon has a hit effect profile, use its values instead of the weapon's base values
+
             return new DamageInfo
             (
-                amount: weapon.Damage,
-                type: weapon.DamageKind,
+                amount: hit.Damage,
+                type: hit.DamageKind,
                 instigator: instigator,
                 hitPoint: hitPoint,
                 hitNormal: hitNormal,
                 hitDirection: hitDirection,
-                stunDuration: weapon.StunDuration,
-                knockbackForce: weapon.KnockbackForce,
-                impulseType: weapon.ImpulseKind,
-                statusEffects: statusEffects
+                stunDuration: hit.StunDuration,
+                knockbackForce: hit.KnockbackForce,
+                impulseType: hit.ImpulseKind,
+                statusEffects: StatusEffectRequestFactory.FromPayloads(hit.StatusEffects, instigator)
             );
         }
 
@@ -118,6 +119,34 @@ namespace Assets.Project.Scripts.Combat
                     impulseType: ImpulseType.PushAwayFromImpact,
                     source: DamageSource.DirectHit,
                     statusEffects: StatusEffectRequestFactory.FromPayloads(onHitEffects, attacker)
+                );
+        }
+
+        public static DamageInfo FromMeleeWeapon
+            (
+                MeleeWeaponData weapon,
+                GameObject attacker,
+                Vector3 hitPoint,
+                Vector3 hitNormal = default
+            )
+        {
+            var hit = weapon.HitEffects;
+
+            if (hitNormal == default)
+                hitNormal = Vector3.up;
+
+            return new DamageInfo
+                (
+                    amount: hit.Damage,
+                    type: hit.DamageKind,
+                    instigator: attacker,
+                    hitPoint: hitPoint,
+                    hitNormal: hitNormal,
+                    stunDuration: hit.StunDuration,
+                    knockbackForce: hit.KnockbackForce,
+                    impulseType: hit.ImpulseKind,
+                    source: DamageSource.DirectHit,
+                    statusEffects: StatusEffectRequestFactory.FromPayloads(hit.StatusEffects, attacker)
                 );
         }
 

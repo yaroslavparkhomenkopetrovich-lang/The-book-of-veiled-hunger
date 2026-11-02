@@ -17,11 +17,11 @@ namespace Assets.Project.Scripts.Weapons
         [FormerlySerializedAs("fireRate")]
         [SerializeField] private float _fireInterval = 0.12f;
         public float FireInterval => _fireInterval;
-        [FormerlySerializedAs("damage")]
-        [SerializeField] private int _damage = 25;
-        public int Damage => _damage;
-        [SerializeField] private DamageType _damageKind = DamageType.Physical;
-        public DamageType DamageKind => _damageKind;
+        //[FormerlySerializedAs("damage")]
+        //[SerializeField] private int _damage = 25;
+        //public int Damage => _damage;
+        //[SerializeField] private DamageType _damageKind = DamageType.Physical;
+        //public DamageType DamageKind => _damageKind;
 
         [Header("Projectile")]
         [SerializeField] private float _bulletSpeed = 35f;
@@ -33,25 +33,31 @@ namespace Assets.Project.Scripts.Weapons
 
         // --- Retro-inspired Stopping Power and Knockback effects ---
 
-        [Header("Hit Reaction")]
-        [Tooltip("Duration of the stun effect")]
-        [SerializeField] private float _stunDuration;
-        public float StunDuration => _stunDuration;
+        //[Header("Hit Reaction")]
+        //[Tooltip("Duration of the stun effect")]
+        //[SerializeField] private float _stunDuration;
+        //public float StunDuration => _stunDuration;
 
-        [Tooltip("Force of the knockback effect")]
-        [SerializeField] private float _knockbackForce;
-        public float KnockbackForce => _knockbackForce;
+        //[Tooltip("Force of the knockback effect")]
+        //[SerializeField] private float _knockbackForce;
+        //public float KnockbackForce => _knockbackForce;
 
-        [Tooltip("Direction of push or pull")]
-        [SerializeField] private ImpulseType _impulseKind = ImpulseType.PushAwayFromBullet;
-        public ImpulseType ImpulseKind => _impulseKind;
+        //[Tooltip("Direction of push or pull")]
+        //[SerializeField] private ImpulseType _impulseKind = ImpulseType.PushAwayFromBullet;
+        //public ImpulseType ImpulseKind => _impulseKind;
 
-        [Header("On-Hit Status Effects")]
-        [SerializeField] private StatusEffectPayload[] _onHitEffects;
-        public StatusEffectPayload[] OnHitEffects => _onHitEffects;
+        //[Header("On-Hit Status Effects")]
+        //[SerializeField] private StatusEffectPayload[] _onHitEffects;
+        //public StatusEffectPayload[] OnHitEffects => _onHitEffects;
 
         [Header("Prefab Reference")]
         [SerializeField] private Projectile _bulletPrefab;
         public Projectile BulletPrefab => _bulletPrefab;
+
+        [Header("Hit Effects")]
+        [SerializeField] private HitEffectProfile _hitEffects;
+        public HitEffectProfile HitEffects => _hitEffects;
+        //public HitEffectProfile HitEffectsOrNull => _hitEffects;
+        // else legacy fiealds
     }
 }

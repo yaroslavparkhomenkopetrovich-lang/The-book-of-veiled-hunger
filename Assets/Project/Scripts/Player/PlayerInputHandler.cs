@@ -13,6 +13,8 @@ namespace Assets.Project.Scripts.Player
         public Vector3 MoveInput { get; private set; }
         public Vector3 AimWorldPosition { get; private set; }
         public bool IsFirePressed { get; private set; }
+        public bool IsMeleePressed { get; private set; }
+
 
         private void Awake()
         {
@@ -27,6 +29,7 @@ namespace Assets.Project.Scripts.Player
             ReadMovementInput();
             ReadAimInput();
             ReadFireInput();
+            ReadMeleeInput();
         }
 
         private void ReadMovementInput()
@@ -62,6 +65,17 @@ namespace Assets.Project.Scripts.Player
 
             // Held down for full auto or check .wasPressedThisFrame for semi-auto
             IsFirePressed = mouse.leftButton.isPressed;
+        }
+
+        private void ReadMeleeInput()
+        {
+            var mouse = Mouse.current;
+            var keyboard = Keyboard.current;
+
+            bool mouseMelee = mouse != null && mouse.rightButton.wasPressedThisFrame;
+            bool keyboardMelee = keyboard != null && keyboard.spaceKey.wasPressedThisFrame;
+
+            IsMeleePressed = mouseMelee || keyboardMelee;
         }
     }
 }
