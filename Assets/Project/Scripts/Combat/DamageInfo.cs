@@ -1,5 +1,6 @@
 using Assets.Project.Scripts.Status;
 using Assets.Project.Scripts.Weapons;
+using Assets.Project.Scripts.Environment;
 using UnityEngine;
 
 namespace Assets.Project.Scripts.Combat
@@ -185,6 +186,36 @@ namespace Assets.Project.Scripts.Combat
                     hitPoint: hitPoint,
                     hitNormal: Vector3.up,
                     source: DamageSource.Environment
+                );
+        }
+
+        public static DamageInfo FromHazardZone
+            (
+                HazardZoneData zone,
+                GameObject source,
+                Vector3 hitPoint
+            )
+        {
+            HitEffectProfile hit = zone.HitEffects;
+
+            StatusEffectPayload[] statuses = zone.ApplyStatusEffects
+                ? hit.StatusEffects
+                : null;
+
+            int amount = zone.DealHitDamage ? hit.Damage : 0;
+
+            return new DamageInfo
+                (
+                    amount: amount,
+                    type: hit.DamageKind,
+                    instigator: source,
+                    hitPoint: hitPoint,
+                    hitNormal: Vector3.up,
+                    stunDuration: zone.DealHitDamage ? hit.StunDuration : 0f,
+                    knockbackForce: zone.DealHitDamage ? hit.KnockbackForce : 0f,
+                    impulseType: hit.ImpulseKind,
+                    source: DamageSource.Environment,
+                    statusEffects: StatusEffectRequestFactory.FromPayloads(statuses, source)
                 );
         }
     }
