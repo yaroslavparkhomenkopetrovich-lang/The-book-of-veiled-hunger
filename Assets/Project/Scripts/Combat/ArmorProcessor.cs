@@ -21,7 +21,7 @@ namespace Assets.Project.Scripts.Combat
         public int MitigateDamage(DamageInfo info)
         {
             // If armor is empty or missing, all damage goes to health
-            if (_armorData.IsDepleted)
+            if (info.Amount <= 0 || _armorData.IsDepleted)
             {
                 return info.Amount;
             }

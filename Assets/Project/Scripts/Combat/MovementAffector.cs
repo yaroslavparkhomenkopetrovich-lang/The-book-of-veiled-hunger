@@ -49,6 +49,13 @@ namespace Assets.Project.Scripts.Combat
             _speedMultiplier = 1f;
         }
 
+        public void ResetAffector()
+        {
+            _stunUntilTime = 0f;
+            _speedMultiplier = 1f;
+            _knockbackVelocity = Vector3.zero;
+        }
+
         // --- Consumed once by movement ---
         /// <summary>
         /// Movement reads and clears knockback when it applies it.

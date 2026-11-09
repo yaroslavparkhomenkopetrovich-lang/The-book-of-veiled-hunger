@@ -67,5 +67,10 @@ namespace Assets.Project.Scripts.Status
 
             return false;
         }
+
+        public void ClearAllStatusEffects()
+        {
+            _activeEffects.Clear();
+        }
     }
 }

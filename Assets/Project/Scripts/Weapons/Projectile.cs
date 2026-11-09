@@ -44,26 +44,16 @@ namespace Assets.Project.Scripts.Weapons
 
         private void OnTriggerEnter(Collider other)
         {
-            Debug.Log($"[1) HIT DETECTED] Bullet hit: {other.gameObject.name}");
-            // Ignore the shooter who fired the projectile
+            // 1) Ignore the shooter who fired the projectile
             if (_instigator != null && other.gameObject == _instigator) return;
 
-            // Deliever damage via IDemagable
+            // 2) Ignore allies with the same tag unless CanHitAllies is set to true
+            if (ShouldIgnoreAlly(other.gameObject)) return;
+
+            // 3) Deliver damage via IDamageable
             if (other.TryGetComponent<IDamageable>(out var target))
             {
-                // Find a point on collider surface closest to the projectile's position on hit
-                Vector3 hitPoint = other.ClosestPoint(transform.position);
-                Vector3 hitNormal = (transform.position - hitPoint).normalized;
-
-                DamageInfo hitInfo = DamageInfo.FromProjectile(
-                    _weaponData,
-                    _instigator,
-                    hitPoint,
-                    hitNormal,
-                    transform.forward
-                );
-
-                target.TakeDamage(hitInfo);
+                target.TakeDamage(DamageInfo.FromProjectile(_weaponData, _instigator, transform, other));
 
                 Release();
             }
@@ -72,6 +62,19 @@ namespace Assets.Project.Scripts.Weapons
                 // If the projectile hits a non-damageable object, it should still despawn
                 Release();
             }
+        }
+
+        private bool ShouldIgnoreAlly(GameObject hitObject)
+        {
+            if (_weaponData == null || _weaponData.HitEffects == null) return false;
+
+            if (_weaponData.HitEffects.CanHitAllies) return false;
+
+            // Check if the other object has the same tag as the instigator
+            if (_instigator == null || _weaponData == null || _weaponData.HitEffects == null)
+                return false;
+            
+            return !_instigator.CompareTag("Untagged") && hitObject.CompareTag(_instigator.tag);
         }
 
         // Called when the projectile's lifetime expires or it hits a target

@@ -1,4 +1,5 @@
 using Assets.Project.Scripts.Combat;
+using Assets.Project.Scripts.Status;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.Pool;
@@ -33,7 +34,9 @@ namespace Assets.Project.Scripts.Enemy
             if (_agent != null)
             {
                 _agent.enabled = true;
-                _agent.isStopped = false;
+
+                if (_agent.isOnNavMesh)
+                    _agent.isStopped = false;
             }
         }
 
@@ -59,6 +62,15 @@ namespace Assets.Project.Scripts.Enemy
 
             // Reset health
             _healthData.CurrentHealth = _healthData.MaxHealth;
+            _healthData.NotifyChanged(false); // false to avoid triggering OnDeath event on reset, UI reset to 100% on enemy respawn
+
+            // Reset status effects
+            if (TryGetComponent<StatusEffectController>(out var status))
+                status.ClearAllStatusEffects();
+
+            // Reset movement affector
+            if (TryGetComponent<MovementAffector>(out var affector))
+                affector.ResetAffector();
 
         }
 

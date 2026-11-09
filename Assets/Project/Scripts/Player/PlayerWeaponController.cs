@@ -31,7 +31,15 @@ namespace Assets.Project.Scripts.Player
             if (Time.time >= _lastFireTime + _weaponData.FireInterval)
             {
                 _lastFireTime = Time.time;
-                _projectileSpawner.SpawnProjectile(_firePoint.position, _firePoint.rotation, _weaponData, gameObject);
+
+                // 1) Calculate random angle Y-axis for bullet spread
+                float randomAngle = Random.Range(-_weaponData.SpreadAngle, _weaponData.SpreadAngle);
+                Quaternion spreadRotation = Quaternion.Euler(0f, randomAngle, 0f);
+
+                // 2) Combine fire point rotation with spread rotation
+                Quaternion finalRotation = _firePoint.rotation * spreadRotation;
+
+                _projectileSpawner.SpawnProjectile(_firePoint.position, finalRotation, _weaponData, gameObject);
             }
         }
     }

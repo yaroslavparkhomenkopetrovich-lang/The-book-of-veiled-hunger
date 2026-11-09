@@ -39,7 +39,10 @@ namespace Assets.Project.Scripts.Combat
         }
         private static bool CanReceiveHit(DamageInfo info)
         {
-            return info.Amount > 0;
+            return info.Amount > 0
+                || info.StunDuration > 0f
+                || info.KnockbackForce > 0f
+                || info.HasStatusEffect;
         }
 
         private int ResolveDamageThroughArmor(DamageInfo info)

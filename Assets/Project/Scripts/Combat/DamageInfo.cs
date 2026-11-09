@@ -68,14 +68,16 @@ namespace Assets.Project.Scripts.Combat
             (
                 WeaponData weapon,
                 GameObject instigator,
-                Vector3 hitPoint,
-                Vector3 hitNormal,
-                Vector3 hitDirection,
-                StatusEffectRequest[] statusEffects = null
+                Transform projectileTransform,
+                Collider hitCollider
             )
         {
-            var hit = weapon.HitEffects;
+            HitEffectProfile hit = weapon.HitEffects;
             // If the weapon has a hit effect profile, use its values instead of the weapon's base values
+
+            // Founds a point on the collider surface closest to the projectile's position on hit
+            Vector3 hitPoint = hitCollider.ClosestPoint(projectileTransform.position);
+            Vector3 hitNormal = (projectileTransform.position - hitPoint).normalized;
 
             return new DamageInfo
             (
@@ -84,10 +86,11 @@ namespace Assets.Project.Scripts.Combat
                 instigator: instigator,
                 hitPoint: hitPoint,
                 hitNormal: hitNormal,
-                hitDirection: hitDirection,
+                hitDirection: projectileTransform.forward,
                 stunDuration: hit.StunDuration,
                 knockbackForce: hit.KnockbackForce,
                 impulseType: hit.ImpulseKind,
+                source: DamageSource.DirectHit,
                 statusEffects: StatusEffectRequestFactory.FromPayloads(hit.StatusEffects, instigator)
             );
         }

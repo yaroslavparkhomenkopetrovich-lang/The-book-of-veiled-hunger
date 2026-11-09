@@ -23,7 +23,7 @@ namespace Assets.Project.Scripts.Status
             _type = request.Type;
             _remainingDuration = request.Duration;
             _power = request.Power;
-            _tickInterval = Mathf.Max(0.5f, request.TickInterval);
+            _tickInterval = Mathf.Max(0.05f, request.TickInterval);
             _tickTimer = 0f;
             _source = request.Source;
         }

@@ -1,0 +1,2449 @@
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\ArmorData.cs ===
+using System;
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Combat
+{
+    public class ArmorData : MonoBehaviour
+    {
+
+        [Header("Armor Pool Limits")]
+        [SerializeField] private int _maxArmor = 100;
+
+        [Header("Mitigation Stats Passive Data")]
+        [Range(0f, 1f)]
+        [Tooltip("Percentage of damage absorbed by armor before passing to health; e.g., 0.5 means 50% of damage is absorbed")]
+        [SerializeField] private float _absorptionRate = 0.75f;
+
+        [Tooltip("Flat damage value substracted before percentage absorption")]
+        [SerializeField] private int _flatDamageReduction = 2;
+
+        public int CurrentArmor { get; set; }
+        public int MaxArmor => _maxArmor;
+        public float AbsorptionRate => _absorptionRate;
+        public int FlatDamageReduction => _flatDamageReduction;
+
+        // State Flags
+        public bool IsDepleted => CurrentArmor <= 0;
+        public bool IsFullArmor => CurrentArmor >= _maxArmor;
+        public float ArmorPercentage => _maxArmor > 0 ? Mathf.Clamp01((float)CurrentArmor / _maxArmor) : 0f;
+
+        // Events
+        public event Action<int, int> OnArmorChanged; // (current, max)
+        public event Action OnArmorBroken;
+
+        // Methods
+
+        private void Awake()
+        {
+            CurrentArmor = _maxArmor;
+        }
+
+        public void NotifyChanged()
+        {
+            OnArmorChanged?.Invoke(CurrentArmor, _maxArmor);
+        }
+
+        public void NotifyBroken()
+        {
+            OnArmorBroken?.Invoke();
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\ArmorProcessor.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Combat
+{
+    [RequireComponent(typeof(ArmorData))]
+    public class ArmorProcessor : MonoBehaviour
+    {
+        private ArmorData _armorData;
+
+        // Methods
+
+        private void Awake()
+        {
+            _armorData = GetComponent<ArmorData>();
+        }
+
+        ///<summary>
+        /// Calculates damage absorbed by armor and reduces the armor pooo.
+        /// Returns the remaining unmitigate damage that should be dealt to health
+        ///</summary>
+        public int MitigateDamage(DamageInfo info)
+        {
+            // If armor is empty or missing, all damage goes to health
+            if (info.Amount <= 0 || _armorData.IsDepleted)
+            {
+                return info.Amount;
+            }
+
+            // 1) Substract flat reduction treshold; e.g. low calliber bullet resistance
+            int effectiveDamage = Mathf.Max(1, info.Amount - _armorData.FlatDamageReduction);
+
+            // 2) Split damage absorbed by armor vs damage passing to HP
+            int damageToArmor = Mathf.RoundToInt(effectiveDamage * _armorData.AbsorptionRate);
+            int passingDamage = effectiveDamage - damageToArmor;
+
+            // 3) Deduct from current armor pool
+            if (_armorData.CurrentArmor >= damageToArmor)
+            {
+                _armorData.CurrentArmor -= damageToArmor;
+            }
+            else
+            {
+                // Armor broke on this hit; ramainidng absorbed amount goes into passing damage
+                int leftoverDamage = damageToArmor - _armorData.CurrentArmor;
+                passingDamage += leftoverDamage;
+                _armorData.CurrentArmor = 0;
+                _armorData.NotifyBroken();
+            }
+
+            _armorData.NotifyChanged();
+            return passingDamage;
+        }
+
+        ///<summary>
+        /// Restores armor points up to MaxArmor
+        ///</summary>
+        public void RepairArmor(int amount)
+        {
+            if (amount <= 0 || _armorData.IsFullArmor) return;
+
+            _armorData.CurrentArmor = Mathf.Min(_armorData.MaxArmor, _armorData.CurrentArmor + amount);
+            _armorData.NotifyChanged();
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\DamageController.cs ===
+using Assets.Project.Scripts.Status;
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Combat
+{
+    [RequireComponent(typeof(DamageProcessor))]
+    [RequireComponent(typeof(MovementAffector))]
+    [RequireComponent(typeof(ImpulseProcessor))]
+    [RequireComponent(typeof(StatusEffectController))]
+    public class DamageController : MonoBehaviour, IDamageable
+    {
+        private DamageProcessor _damageProcessor;
+        private ArmorProcessor _armorProcessor;
+        private ImpulseProcessor _impulseProcessor;
+        private MovementAffector _movementAffector;
+        private StatusEffectController _statusEffectController;
+
+        private void Awake()
+        {
+            _damageProcessor = GetComponent<DamageProcessor>();
+            _armorProcessor = GetComponent<ArmorProcessor>();
+            _impulseProcessor = GetComponent<ImpulseProcessor>();
+            _movementAffector = GetComponent<MovementAffector>();
+            _statusEffectController = GetComponent<StatusEffectController>();
+
+        }
+
+        public void TakeDamage(DamageInfo info)
+        {
+            if (!CanReceiveHit(info)) return;
+
+            int damageToHealth = ResolveDamageThroughArmor(info);
+
+            ApplyHealthDamage(damageToHealth, info.Instigator);
+
+            TryApplyHitImpulse(info);
+
+            TryApplyStatusEffects(info);
+        }
+        private static bool CanReceiveHit(DamageInfo info)
+        {
+            return info.Amount > 0
+                || info.StunDuration > 0f
+                || info.KnockbackForce > 0f
+                || info.HasStatusEffect;
+        }
+
+        private int ResolveDamageThroughArmor(DamageInfo info)
+        {
+            if (_armorProcessor == null) return info.Amount;
+
+            return _armorProcessor.MitigateDamage(info);
+        }
+
+        private void ApplyHealthDamage(int amount, GameObject instigator)
+        {
+            if (amount <= 0) return;
+
+            _damageProcessor.ApplyDamage(amount, instigator);
+        }
+
+        private void TryApplyHitImpulse(DamageInfo info)
+        {
+            if (_impulseProcessor == null || _movementAffector == null) return;
+
+            ImpulseResult impulse = _impulseProcessor.CalculateImpulse
+                (
+                    info,
+                    transform.position,
+                    info.ImpulseType,
+                    info.KnockbackForce,
+                    info.StunDuration
+                );
+
+            if (impulse.Force <= 0f && impulse.StunDuration <= 0f) return;
+
+            _movementAffector.ApplyHitImpulse(impulse);
+        }
+
+        private void TryApplyStatusEffects(DamageInfo info)
+        {
+            if (_statusEffectController == null || !info.HasStatusEffect) return;
+
+                _statusEffectController.ApplyAllStatusEffects(info.StatusEffects);
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\DamageInfo.cs ===
+using Assets.Project.Scripts.Status;
+using Assets.Project.Scripts.Weapons;
+using Assets.Project.Scripts.Environment;
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Combat
+{
+    public readonly struct DamageInfo
+    {
+        // Core
+        public readonly int Amount;                     // Raw damage value
+        public readonly DamageType Type;                // Elemental, psysical, etc
+        public readonly GameObject Instigator;          // Atacker for kills life steal
+
+        // Hit geometry (e.g. VFX, Impulse)
+        public readonly Vector3 HitPoint;               // World position for hit effects
+        public readonly Vector3 HitNormal;              // Surface normal for decal alignment
+
+        public readonly Vector3 HitDirection;           // Bullet flight direction
+
+
+        // Hit reaction (impulse)
+        public readonly float StunDuration;
+        public readonly float KnockbackForce;
+        public readonly ImpulseType ImpulseType;
+
+        // Optional status payloads applied AFTER the hit resolves
+        public readonly StatusEffectRequest[] StatusEffects;
+
+        // Origin of the threat
+
+        public readonly DamageSource Source;
+
+        public DamageInfo
+            (
+                int amount,
+                DamageType type,
+                GameObject instigator,
+                Vector3 hitPoint,
+                Vector3 hitNormal,
+                Vector3 hitDirection = default,
+                float stunDuration = 0f,
+                float knockbackForce = 0f,
+                ImpulseType impulseType = ImpulseType.PushAwayFromBullet,
+                DamageSource source = DamageSource.DirectHit,
+                StatusEffectRequest[] statusEffects = null
+            )
+        {
+            Amount = amount;
+            Type = type;
+            Instigator = instigator;
+            HitPoint = hitPoint;
+            HitNormal = hitNormal;
+            HitDirection = hitDirection;
+            StunDuration = stunDuration;
+            KnockbackForce = knockbackForce;
+            ImpulseType = impulseType;
+            StatusEffects = statusEffects;
+            Source = source;
+        }
+
+        public bool HasStatusEffect =>
+            StatusEffects != null && StatusEffects.Length > 0;
+
+        // -------------------- Constructor helpers ----------------------------
+
+        public static DamageInfo FromProjectile
+            (
+                WeaponData weapon,
+                GameObject instigator,
+                Transform projectileTransform,
+                Collider hitCollider
+            )
+        {
+            HitEffectProfile hit = weapon.HitEffects;
+            // If the weapon has a hit effect profile, use its values instead of the weapon's base values
+
+            // Founds a point on the collider surface closest to the projectile's position on hit
+            Vector3 hitPoint = hitCollider.ClosestPoint(projectileTransform.position);
+            Vector3 hitNormal = (projectileTransform.position - hitPoint).normalized;
+
+            return new DamageInfo
+            (
+                amount: hit.Damage,
+                type: hit.DamageKind,
+                instigator: instigator,
+                hitPoint: hitPoint,
+                hitNormal: hitNormal,
+                hitDirection: projectileTransform.forward,
+                stunDuration: hit.StunDuration,
+                knockbackForce: hit.KnockbackForce,
+                impulseType: hit.ImpulseKind,
+                source: DamageSource.DirectHit,
+                statusEffects: StatusEffectRequestFactory.FromPayloads(hit.StatusEffects, instigator)
+            );
+        }
+
+        public static DamageInfo FromMelee
+            (
+                int amount,
+                DamageType type,
+                GameObject attacker,
+                Vector3 hitPoint,
+                Vector3 hitNormal = default,
+                float stunDuration = 0f,
+                float knockbackForce = 0f,
+                StatusEffectPayload[] onHitEffects = null
+            )
+        {
+            if (hitNormal == default)
+                hitNormal = Vector3.up;
+
+            return new DamageInfo
+                (
+                    amount: amount,
+                    type: type,
+                    instigator: attacker,
+                    hitPoint: hitPoint,
+                    hitNormal: hitNormal,
+                    hitDirection: default,
+                    stunDuration: stunDuration,
+                    knockbackForce: knockbackForce,
+                    impulseType: ImpulseType.PushAwayFromImpact,
+                    source: DamageSource.DirectHit,
+                    statusEffects: StatusEffectRequestFactory.FromPayloads(onHitEffects, attacker)
+                );
+        }
+
+        public static DamageInfo FromMeleeWeapon
+            (
+                MeleeWeaponData weapon,
+                GameObject attacker,
+                Vector3 hitPoint,
+                Vector3 hitNormal = default
+            )
+        {
+            var hit = weapon.HitEffects;
+
+            if (hitNormal == default)
+                hitNormal = Vector3.up;
+
+            return new DamageInfo
+                (
+                    amount: hit.Damage,
+                    type: hit.DamageKind,
+                    instigator: attacker,
+                    hitPoint: hitPoint,
+                    hitNormal: hitNormal,
+                    stunDuration: hit.StunDuration,
+                    knockbackForce: hit.KnockbackForce,
+                    impulseType: hit.ImpulseKind,
+                    source: DamageSource.DirectHit,
+                    statusEffects: StatusEffectRequestFactory.FromPayloads(hit.StatusEffects, attacker)
+                );
+        }
+
+        public static DamageInfo FromStatusTick
+            (
+                int amount,
+                DamageType type,
+                GameObject source,
+                Vector3 targetPosition
+            )
+        {
+            return new DamageInfo
+                (
+                    amount: amount,
+                    type: type,
+                    instigator: source,
+                    hitPoint: targetPosition,
+                    hitNormal: Vector3.up,
+                    source: DamageSource.StatusTick
+                );
+        }
+
+        public static DamageInfo FromEnvironment
+            (
+                int amount,
+                DamageType type,
+                Vector3 hitPoint,
+                GameObject source = null
+            )
+        {
+            return new DamageInfo
+                (
+                    amount: amount,
+                    type: type,
+                    instigator: source,
+                    hitPoint: hitPoint,
+                    hitNormal: Vector3.up,
+                    source: DamageSource.Environment
+                );
+        }
+
+        public static DamageInfo FromHazardZone
+            (
+                HazardZoneData zone,
+                GameObject source,
+                Vector3 hitPoint
+            )
+        {
+            HitEffectProfile hit = zone.HitEffects;
+
+            StatusEffectPayload[] statuses = zone.ApplyStatusEffects
+                ? hit.StatusEffects
+                : null;
+
+            int amount = zone.DealHitDamage ? hit.Damage : 0;
+
+            return new DamageInfo
+                (
+                    amount: amount,
+                    type: hit.DamageKind,
+                    instigator: source,
+                    hitPoint: hitPoint,
+                    hitNormal: Vector3.up,
+                    stunDuration: zone.DealHitDamage ? hit.StunDuration : 0f,
+                    knockbackForce: zone.DealHitDamage ? hit.KnockbackForce : 0f,
+                    impulseType: hit.ImpulseKind,
+                    source: DamageSource.Environment,
+                    statusEffects: StatusEffectRequestFactory.FromPayloads(statuses, source)
+                );
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\DamageProcessor.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Combat
+{
+    [RequireComponent(typeof(HealthData))]
+    public class DamageProcessor : MonoBehaviour
+    {
+        private HealthData _healthData;
+
+        private void Awake()
+        {
+            _healthData = GetComponent<HealthData>();
+        }
+
+        /// <summary>
+        /// Applies incomming damage directly to HealthData of entity.
+        /// </summary>
+        
+        public void ApplyDamage (int amount, GameObject attacker =null)
+        {
+            // Guard: Ignore if dead, negative/zero damage, or invulnerable
+            if (_healthData.IsDead || amount <= 0 || _healthData.IsInvulnerable) return;
+
+            bool wasOverhealth = _healthData.IsOverhealth;
+
+            // 1) Substract damage and clampt to zero
+            _healthData.CurrentHealth = Mathf.Max(0, _healthData.CurrentHealth - amount);
+
+            // 2) Notify listeners of new health state
+            _healthData.NotifyChanged(wasOverhealth);
+
+            // 3) Trigger death event if health is zero
+            if (_healthData.IsDead)
+            {
+                _healthData.NotifyDeath(attacker);
+            }
+
+        }
+
+        public void Defeat(GameObject attacker = null)
+        {
+            if (_healthData.IsDead) return;
+
+            bool wasOverhealed = _healthData.IsOverhealth;
+
+            _healthData.CurrentHealth = 0;
+            _healthData.NotifyChanged(wasOverhealed);
+            _healthData.NotifyDeath(attacker);
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\DamageSource.cs ===
+namespace Assets.Project.Scripts.Combat
+{
+    public enum DamageSource
+    {
+        DirectHit,      // Meele, bullet
+
+        StatusTick,     // Burn, bleed
+
+        Environment     // Trap, acid lake, etc
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\DamageType.cs ===
+namespace Assets.Project.Scripts.Combat
+{
+    public enum DamageType    
+    {
+        Physical,
+        Magical,
+        Fire,
+        Ice,
+        Acid
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\HealthData.cs ===
+using System;
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Combat
+{
+    public class HealthData : MonoBehaviour
+    {
+        [Header("Standard Health Limits")]
+        [SerializeField] private int _maxHealth = 100;
+
+        [Header("Overhealth Limits")]
+        [SerializeField] private int _maxOverhealth = 150;
+
+        [Header("Initial State")]
+        [SerializeField] private bool _isInvulnerable = false;
+
+        [Header("Regeneration Stats Passive Data")]
+        [SerializeField] private bool _canRegenerate = false;
+        [SerializeField] private int _regenAmountPerTick = 2;
+        [SerializeField] private float _regenTickInterval = 1.0f;
+        [SerializeField] private float _regenDelayAfterDamage = 3.0f;
+
+        public int CurrentHealth { get; set; }
+        public int MaxHealth => _maxHealth;
+        public int MaxOverhealth => _maxOverhealth;
+        public bool IsInvulnerable { get; set; }
+
+        public bool CanRegenerate => _canRegenerate;
+        public int RegenAmountPerTick => _regenAmountPerTick;
+        public float RegenTickInterval => _regenTickInterval;
+        public float RegenDelayAfterDamage => _regenDelayAfterDamage;
+
+        // State Flags
+        public bool IsDead => CurrentHealth <= 0;
+        public bool IsFullHealth => CurrentHealth >= _maxHealth;
+        public bool IsOverhealth => CurrentHealth > _maxHealth;
+
+        // Derived numeric Readouts
+        public int OverhealAmount => Mathf.Max(0, CurrentHealth - _maxHealth);
+        public float HealthPercentage => Mathf.Clamp01((float)CurrentHealth/_maxHealth);
+
+        // Events
+        public event Action<int, int> OnHealthChanged; // (current, max)
+        public event Action<bool> OnOverhealthStateChanged;
+        public event Action<bool> OnInvulnerabilityChanged;
+        public event Action<GameObject> OnDeath;
+
+        private void Awake()
+        {
+            CurrentHealth = _maxHealth;
+            IsInvulnerable = _isInvulnerable;
+        }
+
+        public void SetInvulnerable(bool state)
+        {
+            if (IsInvulnerable == state) return;
+            IsInvulnerable = state;
+            OnInvulnerabilityChanged?.Invoke(IsInvulnerable);
+        }
+
+        public void NotifyChanged(bool previousOverhealState)
+        {
+            OnHealthChanged?.Invoke(CurrentHealth, _maxHealth);
+
+            if (previousOverhealState != IsOverhealth)
+            {
+                OnOverhealthStateChanged?.Invoke(IsOverhealth);
+            }
+        }
+
+        public void NotifyDeath(GameObject attacker)
+        {
+            OnDeath?.Invoke(attacker);
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\IArmor.cs ===
+namespace Assets.Project.Scripts.Combat
+{
+    public interface IArmor
+    {
+        // Return final damage after armor mitigation
+        int MitigateDamage(DamageInfo damageInfo);
+        void RepairArmor(int amount);
+
+        // Current armor values for UI display
+        int CurrentArmor { get; }
+        int MaxArmor { get; }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\IDamageable.cs ===
+namespace Assets.Project.Scripts.Combat
+{ 
+    public interface IDamageable
+    {
+        void TakeDamage(DamageInfo info);
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\ImpulseProcessor.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Combat
+{
+    public class ImpulseProcessor : MonoBehaviour
+    {
+        /// <summary>
+        /// Returns resolved planar vector and stun
+        /// </summary>
+        public ImpulseResult CalculateImpulse
+            (
+                DamageInfo info,
+                Vector3 targetPosition,
+                ImpulseType impulseType,
+                float force,
+                float stunDuration
+            )
+        {
+            if (force <= 0f && stunDuration <= 0f)
+            {
+                return new ImpulseResult(Vector3.zero, 0f, 0f);
+            }
+
+            Vector3 rawDirection = Vector3.zero;
+
+            switch (impulseType)
+            {
+                case ImpulseType.PushAwayFromBullet:
+                    rawDirection = info.HitDirection;
+                    break;
+
+                case ImpulseType.PushAwayFromImpact:
+                    rawDirection = targetPosition - info.HitPoint;
+                    break;
+
+                case ImpulseType.PullTowardImpact:
+                    rawDirection = info.HitPoint - targetPosition;
+                    break;
+
+                case ImpulseType.PullTowardShooter:
+                    if (info.Instigator != null)
+                    {
+                        rawDirection = info.Instigator.transform.position - targetPosition;
+                    }
+                    break;
+            }
+
+            // Keep physical impulse strictly plannar
+            rawDirection.y = 0f;
+
+            Vector3 finalDirection = rawDirection.sqrMagnitude > 0.001f ? rawDirection.normalized : Vector3.zero;
+
+            return new ImpulseResult(finalDirection, force,stunDuration);
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\ImpulseResult.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Combat
+{
+    public readonly struct ImpulseResult
+    {
+        public readonly Vector3 Direction;
+        public readonly float Force;
+        public readonly float StunDuration;
+
+        public ImpulseResult(Vector3 direction, float force, float stunDuration)
+        {
+            Direction = direction;
+            Force = force;
+            StunDuration = stunDuration;
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\ImpulseType.cs ===
+namespace Assets.Project.Scripts.Combat
+{
+    public enum ImpulseType
+    {
+        PushAwayFromBullet, // Standard: pushes along the projectile's flight direction
+        PushAwayFromImpact, // Retro: pushes away from the hit point (like a shotgun blast)
+        PullTowardImpact,   // Vortex: pulls toward the impact center
+        PullTowardShooter   // Harpoon: pulls enemies toward the player
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Combat\MovementAffector.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Combat
+{
+    public class MovementAffector : MonoBehaviour
+    {
+        private float _stunUntilTime;
+        private float _speedMultiplier = 1f;
+        private Vector3 _knockbackVelocity;
+
+        // --- Read by movement ---
+        public bool IsStunned => Time.time < _stunUntilTime;
+        public float SpeedMultiplier => Mathf.Max(0f, _speedMultiplier);
+        public bool HasKnockback => _knockbackVelocity.sqrMagnitude >= 0.001f;
+        public Vector3 KnockbackVelocity => _knockbackVelocity;
+
+        // --- Written by combat/status ---
+        public void ApplyStun(float duration)
+        {
+            if (duration <= 0f) return;
+
+            _stunUntilTime = Mathf.Max(_stunUntilTime, Time.time + duration);
+        }
+
+        /// <summary>
+        /// Queues planar knockback for movement to consume once.
+        /// </summary>
+        public void ApplyKnockback(Vector3 direction, float force)
+        {
+            direction.y = 0f;
+
+            if (force <= 0f || direction.sqrMagnitude < 0.001f) return;
+
+            _knockbackVelocity += direction.normalized * force;
+        }
+        public void ApplyHitImpulse(ImpulseResult impulse) // Stun plus knockback
+        {
+            ApplyStun(impulse.StunDuration);
+            ApplyKnockback(impulse.Direction, impulse.Force);
+        }
+
+        public void SetSpeedMultiplier(float multiplier)
+        {
+            _speedMultiplier = Mathf.Max(0f, multiplier);
+        }
+
+        public void ResetSpeedMultiplier()
+        {
+            _speedMultiplier = 1f;
+        }
+
+        public void ResetAffector()
+        {
+            _stunUntilTime = 0f;
+            _speedMultiplier = 1f;
+            _knockbackVelocity = Vector3.zero;
+        }
+
+        // --- Consumed once by movement ---
+        /// <summary>
+        /// Movement reads and clears knockback when it applies it.
+        /// </summary>
+        public void TickKnockback(float deltaTime, float drag = 10f)
+        {
+            _knockbackVelocity = Vector3.MoveTowards
+                (
+                    _knockbackVelocity,
+                    Vector3.zero, drag * deltaTime
+                );
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Core\EnemySpawnCollider.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Core
+{
+    [RequireComponent(typeof(Collider))]
+    public class EnemySpawnCollider : EnemySpawnCondition
+    {
+        private void OnTriggerEnter(Collider other)
+        {
+            if (other.CompareTag("Player"))
+            {
+                TriggerSpawn(other.transform.position);
+            }
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Core\EnemySpawnCondition.cs ===
+using System;
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Core
+{
+    public abstract class EnemySpawnCondition : MonoBehaviour
+    {
+        // Abstract method to determine if the spawn condition is met
+        public event Action<Vector3> OnSpawnPointTriggered;
+
+        protected void TriggerSpawn(Vector3 spawnPoint)
+        {
+            OnSpawnPointTriggered?.Invoke(spawnPoint);
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Core\EnemySpawnController.cs ===
+using UnityEngine;
+using UnityEngine.AI;
+
+namespace Assets.Project.Scripts.Core
+{
+    public class EnemySpawnController : MonoBehaviour
+    {
+        [Header("Spawner Reference")]
+        [SerializeField] private EnemySpawner _enemySpawner;
+
+        [Header("Spawn Instruction to Send")]
+        [Header("Spawn Count & Points")]
+        [SerializeField] private int _enemiesToSpawn = 23;
+        [SerializeField] private Transform[] _spawnPoints;
+
+        [Header("Random Radius Settings")]
+        [SerializeField] private bool _useRandomRadius = false;
+        [SerializeField] private float _spawnInterval = 2.0f;
+        [SerializeField] private int _totalEnemiesToSpawn = 20;
+        [SerializeField] private float _minRadius = 2.0f;
+        [SerializeField] private float _maxRadius = 5.0f;
+
+        [Header("Optional Fixed Center Points, Leave empty to use hit position")]
+        [SerializeField] private Transform[] _spwanPoints;
+
+        private EnemySpawnCondition[] _conditions;
+
+        private void Awake()
+        {
+            // Automatically grabs spawn conditions from the children of this GameObject
+            _conditions = GetComponentsInChildren<EnemySpawnCondition>();
+
+            if (_enemySpawner == null)
+                _enemySpawner = FindAnyObjectByType<EnemySpawner>();
+        }
+
+        private void OnEnable()
+        {
+            for (int i = 0; i < _conditions.Length; i++)
+            {
+                if (_conditions[i] != null)
+                    _conditions[i].OnSpawnPointTriggered += HandleSpawn;
+            }
+        }
+
+        private void OnDisable()
+        {
+            for (int i = 0; i < _conditions.Length; i++)
+            {
+                if (_conditions[i] != null)
+                    _conditions[i].OnSpawnPointTriggered -= HandleSpawn;
+            }
+        }
+
+        private void HandleSpawn(Vector3 conditionPosition)
+        {
+            if (_enemySpawner == null || _spawnPoints == null || _spawnPoints.Length == 0) return;
+
+            for (int i = 0; i < _enemiesToSpawn; i++)
+            {
+                Vector3 center = GetCenterPoint(conditionPosition);
+
+                Vector3 spawnPos = _useRandomRadius
+                    ? GetRandomPointInRadius(center)
+                    : center;
+
+                _enemySpawner.SpawnEnemy(spawnPos);
+            }
+        }
+
+        private Vector3 GetCenterPoint(Vector3 fallbackPosition)
+        {
+            if (_spawnPoints == null || _spawnPoints.Length == 0)
+                return fallbackPosition;
+
+            int index = Random.Range(0, _spawnPoints.Length);
+
+            // Return the position of the selected spawn point, or fallback to the provided position if null
+            return _spawnPoints[index] != null ? _spawnPoints[index].position : fallbackPosition;
+        }
+
+        private Vector3 GetRandomPointInRadius(Vector3 center)
+        {
+            Vector2 dir = Random.insideUnitCircle.normalized;
+
+            if (dir == Vector2.zero)
+                dir = Vector2.right; // Default direction if random point is zero
+
+            float distance = Random.Range(_minRadius, _maxRadius);
+            // Candidate point of spawn
+            Vector3 candidate = center + new Vector3(dir.x * distance, 0, dir.y * distance);
+
+            if (NavMesh.SamplePosition(candidate, out NavMeshHit hit, 2.0f, NavMesh.AllAreas))
+            {
+                return hit.position;
+            }
+
+            return center;
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Core\EnemySpawner.cs ===
+using Assets.Project.Scripts.Enemy;
+using UnityEngine;
+using UnityEngine.Pool;
+
+namespace Assets.Project.Scripts.Core
+{
+    public class EnemySpawner : MonoBehaviour
+    {
+        [SerializeField] private EnemyPoolHandler _enemyPrefab;
+        [SerializeField] private int _defaultCapacity = 20;
+        [SerializeField] private int _maxPoolSize = 50;
+
+        private IObjectPool<EnemyPoolHandler> _enemyPool;
+
+        private void Awake()
+        {
+            // Enemy pool initialization    
+            _enemyPool = new ObjectPool<EnemyPoolHandler>(
+                createFunc: () => Instantiate(_enemyPrefab),
+                actionOnGet: enemy => enemy.gameObject.SetActive(true),
+                actionOnRelease: enemy => enemy.gameObject.SetActive(false),
+                actionOnDestroy: enemy => Destroy(enemy.gameObject),
+                collectionCheck: false,
+                defaultCapacity: _defaultCapacity,
+                maxSize: _maxPoolSize
+            );
+        }
+
+        public void SpawnEnemy(Vector3 spawnPosition)
+        {
+            EnemyPoolHandler enemy = _enemyPool.Get();
+            enemy.transform.position = spawnPosition;
+            enemy.Initialize(_enemyPool);
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Core\EnemySpawnTimer.cs ===
+using Unity.VisualScripting;
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Core
+{
+    public class EnemySpawnTimer : EnemySpawnCondition
+    {
+        [SerializeField] private float _spawnInterval = 2.0f;
+        [SerializeField] private int _totalEnemiesToSpawn = 20;
+
+        private float _timer;
+        private int _spawnedEnemiesCount;
+
+        private void Update()
+        {
+            if (_spawnedEnemiesCount >= _totalEnemiesToSpawn) return;
+            
+            _timer += Time.deltaTime;
+
+            if (_timer >= _spawnInterval)
+            {
+                _timer = 0f;
+                _spawnedEnemiesCount++;
+
+                TriggerSpawn(transform.position); // Trigger spawn at the current position
+            }
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Core\EnemySpawnTriggerZone.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Core
+{
+    [RequireComponent(typeof(Collider))]
+    public class EnemySpawnTriggerZone : EnemySpawnCondition
+    {
+        [SerializeField] private bool _triggerOnce = true;
+        private bool _hasTriggered;
+
+        private void Reset()
+        {
+            GetComponent<Collider>().isTrigger = true;
+        }
+
+        private void OnTriggerEnter(Collider other)
+        {
+            if (_hasTriggered && _triggerOnce) return;
+
+            if (other.CompareTag("Player"))
+            {
+                _hasTriggered = true;
+
+                TriggerSpawn(other.transform.position);
+            }
+        }
+    }
+}
+
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Core\ProjectileSpawner.cs ===
+using Assets.Project.Scripts.Weapons;
+using UnityEngine;
+using UnityEngine.Pool;
+
+namespace Assets.Project.Scripts.Core
+{
+    public class ProjectileSpawner : MonoBehaviour
+    {
+        [Header("Pool Configuration")]
+        [SerializeField] private Projectile _projectilePrefab;
+        [SerializeField] private int _defaultPoolSize = 30;
+        [SerializeField] private int _maxPoolSize = 100;
+
+        private IObjectPool<Projectile> _projectilePool;
+
+        private void Awake()
+        {
+            // Initialize the projectile pool with the specified prefab and pool sizes
+            _projectilePool = new ObjectPool<Projectile>(
+                createFunc: () => Instantiate(_projectilePrefab),
+                actionOnGet: projectile => projectile.gameObject.SetActive(true),
+                actionOnRelease: projectile => projectile.gameObject.SetActive(false),
+                actionOnDestroy: projectile => Destroy(projectile.gameObject),
+                collectionCheck: false, // Set to true if you want to check for duplicates in the pool (useful for debugging)
+                defaultCapacity: _defaultPoolSize,
+                maxSize: _maxPoolSize
+            );
+        }
+
+        public Projectile SpawnProjectile(Vector3 position, Quaternion rotation, WeaponData weaponData, GameObject owner)
+        {
+            // Get a projectile from the pool
+            Projectile projectile = _projectilePool.Get();
+
+            projectile.transform.SetPositionAndRotation(position, rotation);
+
+            projectile.Initialize(weaponData, owner, _projectilePool);
+            return projectile;
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Core\TopDownCameraFollow.cs ===
+using UnityEngine;
+
+public class TopDownCameraFollow : MonoBehaviour
+{
+    [Header("Tracking Target")]
+    [SerializeField] private Transform _target;
+
+    [Header("Position & Offset")]
+    [SerializeField] private Vector3 _offset = new (0f, 15f, -8f);
+    [SerializeField] private float _smoothSpeed = 5f;
+
+    private void LateUpdate()
+    {
+        if (_target == null) return;
+
+        // 1) Calculate the desired position based on the target's position and the offset
+        Vector3 desiredPosition = _target.position + _offset;
+
+        // 2) Smoothly interpolate the camera's position towards the desired position
+        transform.position = Vector3.Lerp(
+            transform.position,
+            desiredPosition,
+            _smoothSpeed * Time.deltaTime
+            );
+
+        // 3) Keep camera pointed at the target
+        // transform.LookAt(_target.position);
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Enemy\EnemyController.cs ===
+using UnityEngine;
+using Assets.Project.Scripts.Enemy;
+using Assets.Project.Scripts.Combat;
+
+[RequireComponent(typeof(EnemyMovement))]
+[RequireComponent(typeof(HealthData))]
+[RequireComponent(typeof(EnemyMeleeAttack))]
+public class EnemyController : MonoBehaviour
+{
+    private EnemyMovement _movement;
+    private EnemyMeleeAttack _attack;
+    private HealthData _healthData;
+    private Transform _playerTransform;
+    private IDamageable _playerDamageable;
+
+    private void Awake()
+    {
+        _movement = GetComponent<EnemyMovement>();
+        _attack = GetComponent<EnemyMeleeAttack>();
+        _healthData = GetComponent<HealthData>();   
+    }
+
+    public void Start()
+    {
+        var player = GameObject.FindGameObjectWithTag("Player");
+        if (player != null)   
+        {
+            _playerTransform = player.transform;
+            _playerDamageable = player.GetComponent<IDamageable>();
+        }
+    }
+
+    // If a player within range, stop and attack
+    private void Update()
+    {
+        if (_playerTransform == null || _playerDamageable == null || _healthData.IsDead) return;
+
+        if (_movement.IsStunned)
+            return;
+
+
+
+        float distanceToPlayer = Vector3.Distance(transform.position, _playerTransform.position);
+
+        if (_attack.CanAttack(distanceToPlayer) && _playerDamageable != null)
+        {
+            _movement.Stop();
+            _attack.Attack(_playerDamageable);
+        }
+        else
+        {
+            _movement.Resume();
+            _movement.MoveTowards(_playerTransform.position);
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Enemy\EnemyMeleeAttack.cs ===
+using UnityEngine;
+using Assets.Project.Scripts.Combat;
+using Assets.Project.Scripts.Status;
+
+public class EnemyMeleeAttack : MonoBehaviour
+{
+    [SerializeField] private int _damage = 10;
+    [SerializeField] private float _cooldown = 1.0f;
+    [SerializeField] private float _range = 1.2f;
+    [SerializeField] private DamageType _damageType = DamageType.Physical;
+    [SerializeField] private StatusEffectPayload[] _onHitEffects;
+
+
+    private float _lastAttackTime;
+
+    public float AttackRange => _range;
+
+    // Throttling attacks to prevent spamming
+    public bool CanAttack(float distanceToTarget)
+    {
+        return distanceToTarget <= _range && Time.time >= _lastAttackTime + _cooldown;
+    }
+
+    public void Attack(IDamageable target)
+    {
+        _lastAttackTime = Time.time;
+
+        DamageInfo info = DamageInfo.FromMelee(
+            _damage,
+            _damageType,
+            gameObject,
+            transform.position,
+            Vector3.up,
+            onHitEffects: _onHitEffects
+            );
+
+        target.TakeDamage(info);
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Enemy\EnemyMovement.cs ===
+using Assets.Project.Scripts.Combat;
+using UnityEngine;
+using UnityEngine.AI;
+
+namespace Assets.Project.Scripts.Enemy
+{
+    [RequireComponent(typeof(NavMeshAgent))]
+    [RequireComponent(typeof(MovementAffector))]
+    public class EnemyMovement : MonoBehaviour
+    {
+        [SerializeField] private float _pathUpdateInterval = 0.2f;
+
+        private NavMeshAgent _agent;
+        private MovementAffector _movementAffector;
+
+        private float _nextPathUpdateTime;
+        private float _baseSpeed;
+        private bool _wasStunned;
+
+        public NavMeshAgent Agent => _agent;
+        public bool IsStunned => _movementAffector != null && _movementAffector.IsStunned;
+
+        private void Awake()
+        {
+            _agent = GetComponent<NavMeshAgent>();
+            _movementAffector = GetComponent<MovementAffector>();
+            _baseSpeed = _agent.speed;
+        }
+
+        private void Update()
+        {
+            ApplyMovementModifiers();
+        }
+
+        private void ApplyMovementModifiers()
+        {
+            if (_movementAffector == null || !_agent.enabled) return;
+
+            _agent.speed = _baseSpeed * _movementAffector.SpeedMultiplier;
+
+            bool stunned = _movementAffector.IsStunned;
+
+            if (stunned)
+            {
+                _agent.isStopped = true;
+            }
+            else if (_wasStunned)
+            {
+                // Stun ended
+                _agent.isStopped = false;
+            }
+
+            _wasStunned = stunned;
+
+            if (_movementAffector.HasKnockback)
+            {
+                _agent.Move(_movementAffector.KnockbackVelocity * Time.deltaTime);
+                _movementAffector.TickKnockback(Time.deltaTime);
+            }
+
+        }
+
+        // Throttling pathfinding updates to improve performance
+        public void MoveTowards (Vector3 destination)
+        {
+            if (!_agent.enabled || _agent.isStopped || IsStunned) return;
+
+            if (Time.time >= _nextPathUpdateTime)
+            {
+                _nextPathUpdateTime = Time.time + _pathUpdateInterval;
+                _agent.SetDestination(destination);
+            }
+        }
+
+        public void Stop()
+        {
+            if (_agent.enabled) _agent.isStopped = true;
+        }
+
+        public void Resume()
+        {
+            if (_agent.enabled && !IsStunned)
+                _agent.isStopped = false;
+        }      
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Enemy\EnemyPoolHandler.cs ===
+using Assets.Project.Scripts.Combat;
+using Assets.Project.Scripts.Status;
+using UnityEngine;
+using UnityEngine.AI;
+using UnityEngine.Pool;
+
+namespace Assets.Project.Scripts.Enemy
+{
+    [RequireComponent(typeof(HealthData))]
+    [RequireComponent(typeof(NavMeshAgent))]
+    public class EnemyPoolHandler : MonoBehaviour
+    {
+        private HealthData _healthData;
+        private NavMeshAgent _agent;
+        private ArmorData _armorData;
+        private Collider _collider;
+        private IObjectPool<EnemyPoolHandler> _originatingPool;
+
+        private void Awake()
+        {
+            _agent = GetComponent<NavMeshAgent>();
+            _collider = GetComponent<Collider>();
+            _healthData = GetComponent<HealthData>();
+            _armorData = GetComponent<ArmorData>();
+        }
+
+        private void OnEnable()
+        {
+            // 1) Subscribe to death event from Health component
+            _healthData.OnDeath += HandleDeath;
+
+            // 2) Restore physics and navigation state when pulled from pool
+            if (_collider != null) _collider.enabled = true;
+            if (_agent != null)
+            {
+                _agent.enabled = true;
+
+                if (_agent.isOnNavMesh)
+                    _agent.isStopped = false;
+            }
+        }
+
+        private void OnDisable()
+        {
+            // Unsubscribe to avoid memory leaks
+            _healthData.OnDeath -= HandleDeath;
+        }
+
+        /// <summary>
+        /// Called by the Spawener when pulling this enemy out of the pool.
+        /// </summary>
+        public void Initialize(IObjectPool<EnemyPoolHandler> pool)
+        {
+            _originatingPool = pool;
+
+            // Reset health and armor pools to full capacity
+            if (_armorData != null)
+            {
+                _armorData.CurrentArmor = _armorData.MaxArmor;
+                _armorData.NotifyChanged();
+            }
+
+            // Reset health
+            _healthData.CurrentHealth = _healthData.MaxHealth;
+            _healthData.NotifyChanged(false); // false to avoid triggering OnDeath event on reset, UI reset to 100% on enemy respawn
+
+            // Reset status effects
+            if (TryGetComponent<StatusEffectController>(out var status))
+                status.ClearAllStatusEffects();
+
+            // Reset movement affector
+            if (TryGetComponent<MovementAffector>(out var affector))
+                affector.ResetAffector();
+
+        }
+
+        private void HandleDeath(GameObject attacker)
+        {
+            // 1) Instantly stops AI and disable collision so bullets player can pass through
+            if (_agent != null && _agent.isOnNavMesh)
+            {
+                _agent.isStopped = true;
+                _agent.enabled = false;
+            }
+
+            if (_collider != null)
+            {
+                _collider.enabled = false;
+            }
+
+            // 2) Release back to poo or deactivate fallback
+            if (_originatingPool != null)
+            {
+                _originatingPool.Release(this);
+            }
+            else
+            {
+                gameObject.SetActive(false);
+            }
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Environment\HazardZone.cs ===
+using Assets.Project.Scripts.Combat;
+using Assets.Project.Scripts.Status;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Environment
+{
+    [RequireComponent(typeof(Collider))]
+    public class HazardZone : MonoBehaviour
+    {
+        [SerializeField] private HazardZoneData _data;
+        public HazardZoneData Data => _data;
+
+        // Pre-collider no GC per frame
+        private readonly Dictionary<Collider, float> _nextPulseTime = new();
+
+        private void Reset()
+        {
+            var coll = GetComponent<Collider>();
+            coll.isTrigger = true;
+        }
+
+        private void OnTriggerStay(Collider other)
+        {
+            if (_data == null || _data.HitEffects == null) return;
+
+            float now = Time.time;
+
+            if (_nextPulseTime.TryGetValue(other, out float next) && now < next)
+                return;
+
+            _nextPulseTime[other] = now + _data.PulseInterval;
+
+            // Status-only path
+            if (!_data.DealHitDamage && _data.ApplyStatusEffects)
+            {
+                if (!other.TryGetComponent<StatusEffectController>(out var statuses))
+                    return;
+
+                var requests = StatusEffectRequestFactory.FromPayloads
+                    (
+                        _data.HitEffects.StatusEffects,
+                        gameObject
+                    );
+
+                statuses.ApplyAllStatusEffects(requests);
+                return;
+            }
+
+            // Damage (+optional status) - path same as gun/melee
+            if (!other.TryGetComponent<IDamageable>(out var damageable))
+                return;
+
+            DamageInfo info = DamageInfo.FromHazardZone
+                (
+                    _data,
+                    gameObject,
+                    other.ClosestPoint(transform.position)
+                );
+
+            damageable.TakeDamage(info);
+        }
+
+        private void OnTriggerExit(Collider other)
+        {
+            _nextPulseTime.Remove(other);
+        }
+    }
+}
+
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Environment\HazardZoneData.cs ===
+using Assets.Project.Scripts.Weapons;
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Environment
+{
+    [CreateAssetMenu(fileName = "Hazard_", menuName = "Combat/Hazard Zone Data")]
+    public class HazardZoneData : ScriptableObject
+    {
+        [SerializeField] private string _zoneName = "Acid Pool";
+        public string ZoneName => _zoneName;
+
+        [Tooltip("Seconds between each damage tick")]
+        [SerializeField] private float _pulseInterval = 0.5f;
+        public float PulseInterval => _pulseInterval;
+
+        [SerializeField] private bool _dealHitDamage = true;
+        public bool DealHitDamage => _dealHitDamage;
+
+        [SerializeField] private bool _applyStatusEffects = true;
+        public bool ApplyStatusEffects => _applyStatusEffects;
+
+        [Header("Hit Effects")]
+        [SerializeField] private HitEffectProfile _hitEffects;
+        public HitEffectProfile HitEffects => _hitEffects;
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Player\PlayerController.cs ===
+using UnityEngine;
+using Assets.Project.Scripts.Weapons;
+
+namespace Assets.Project.Scripts.Player
+{
+    [RequireComponent(typeof(PlayerInputHandler))]
+    [RequireComponent(typeof(PlayerMovement))]
+    [RequireComponent(typeof(PlayerWeaponController))]
+    public class PlayerController : MonoBehaviour
+    {
+        private PlayerInputHandler _inputHandler;
+        private PlayerMovement _movement;
+        private PlayerWeaponController _weaponController;
+        private PlayerMeleeAttack _meleeAttack;
+
+        private void Awake()
+        {
+            _inputHandler = GetComponent<PlayerInputHandler>();
+            _movement = GetComponent<PlayerMovement>();
+            _weaponController = GetComponent<PlayerWeaponController>();
+            _meleeAttack = GetComponent<PlayerMeleeAttack>();
+        }  
+
+        // Update is called once per frame
+        void Update()
+        {
+            // 1) Send movement and aiming to PlayerMovement
+            _movement.MoveTowards(_inputHandler.MoveInput);
+            _movement.RotateTowards(_inputHandler.AimWorldPosition);
+
+            // 2) Trigger firing in PlayerWeaponController
+            if (_inputHandler.IsFirePressed)
+            {
+                _weaponController.TryFire();
+            }
+
+            // 3) Trigger melee attack in PlayerMeleeAttack
+            if (_inputHandler.IsMeleePressed)
+            {
+                _meleeAttack.TryAttack();
+            }
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Player\PlayerInputHandler.cs ===
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+namespace Assets.Project.Scripts.Player
+{
+    public class PlayerInputHandler : MonoBehaviour
+    {
+        [Header("Aiming Settings")]
+        [SerializeField] private Camera _camera;
+        [SerializeField] private LayerMask _groundLayer;
+
+        // Public properties ready to be read by other scripts
+        public Vector3 MoveInput { get; private set; }
+        public Vector3 AimWorldPosition { get; private set; }
+        public bool IsFirePressed { get; private set; }
+        public bool IsMeleePressed { get; private set; }
+
+
+        private void Awake()
+        {
+            if (_camera == null)
+            {
+                _camera = Camera.main;
+            }
+        }
+
+        private void Update()
+        {
+            ReadMovementInput();
+            ReadAimInput();
+            ReadFireInput();
+            ReadMeleeInput();
+        }
+
+        private void ReadMovementInput()
+        {
+            var keyboard = Keyboard.current;
+            if (keyboard == null) return;
+
+            Vector3 move = Vector3.zero; // Reset movement vector
+            if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) move.z += 1f;
+            if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) move.z -= 1f;
+            if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) move.x += 1f;
+            if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) move.x -= 1f;
+
+            MoveInput = move.normalized; // Normalize to prevent faster diagonal movement
+        }
+
+        private void ReadAimInput()
+        {
+            var mouse = Mouse.current;
+            if (mouse == null) return;
+
+            Ray ray = _camera.ScreenPointToRay(mouse.position.ReadValue()); // Create a ray from the camera to the mouse position
+            if (Physics.Raycast(ray, out RaycastHit hit, 300f, _groundLayer)) // Check if the ray hits the ground layer
+            {
+                AimWorldPosition = hit.point;
+            }
+        }
+
+        private void ReadFireInput()
+        {
+            var mouse = Mouse.current;
+            if (mouse == null) return;
+
+            // Held down for full auto or check .wasPressedThisFrame for semi-auto
+            IsFirePressed = mouse.leftButton.isPressed;
+        }
+
+        private void ReadMeleeInput()
+        {
+            var mouse = Mouse.current;
+            var keyboard = Keyboard.current;
+
+            bool mouseMelee = mouse != null && mouse.rightButton.wasPressedThisFrame;
+            bool keyboardMelee = keyboard != null && keyboard.spaceKey.wasPressedThisFrame;
+
+            IsMeleePressed = mouseMelee || keyboardMelee;
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Player\PlayerMeleeAttack.cs ===
+using Assets.Project.Scripts.Weapons;
+using Assets.Project.Scripts.Combat;
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Player
+{
+    public class PlayerMeleeAttack : MonoBehaviour
+    {
+        [SerializeField] private MeleeWeaponData _weapon;
+        [SerializeField] private Transform _attackOrigin; // Empty child GameObject representing the origin point of the melee attack
+        [SerializeField] private LayerMask _enemyLayer; // Set this to the layer(s) that your enemies are on
+
+        private readonly Collider[] _hitBuffer = new Collider[32]; // Buffer to store hit results
+
+        private float _nextAttackTime;
+
+        public void TryAttack()
+        {
+            if (_weapon == null || _attackOrigin == null) return;
+
+            if (Time.time < _nextAttackTime) return;
+
+            _nextAttackTime = Time.time + _weapon.AttackInterval;
+
+            // Sphere in front of the player to detect enemies within attack range
+
+            Vector3 center = _attackOrigin.position + _attackOrigin.forward * (_weapon.AttackRange / 2);
+
+            int hitCount = Physics.OverlapSphereNonAlloc
+                (
+                    center,
+                    _weapon.HitRadius,
+                    _hitBuffer,
+                    _enemyLayer
+                );
+
+            for (int i = 0; i < hitCount; i++)
+            {
+                Collider coll = _hitBuffer[i];
+
+                if (coll == null) continue;
+                if (coll.gameObject == gameObject) continue; // Skip self
+                if (!coll.TryGetComponent<IDamageable>(out var target)) continue; // Skip if the target is not damageable
+
+                    DamageInfo info = DamageInfo.FromMeleeWeapon
+                    (
+                        _weapon,
+                        gameObject,
+                        coll.ClosestPoint(_attackOrigin.position),
+                        Vector3.up
+                    );
+
+                    target.TakeDamage(info);
+            }
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Player\PlayerMovement.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Player
+{
+    [RequireComponent(typeof(PlayerInputHandler))]
+    public class PlayerMovement : MonoBehaviour
+    {
+        [SerializeField] private float _speed = 6f;
+        private CharacterController _charController;
+
+        private void Awake()
+        {
+            _charController = GetComponent<CharacterController>();
+        }
+
+        public void MoveTowards(Vector3 direction)
+        {
+            direction.y = 0f; // Ensure movement is only in the XZ plane
+
+            Vector3 motion = Vector3.zero;
+
+            if (direction.sqrMagnitude > 0.01f) // Check if the movement vector is significant
+            {
+               motion = direction.normalized * (_speed * Time.deltaTime);
+            }
+
+            // Always apply persistent downward acceleration
+            motion.y = -9.8f * Time.deltaTime;
+
+             _charController.Move(motion);
+        }
+
+        public void RotateTowards(Vector3 targetDir)
+        {
+           
+            targetDir.y = transform.position.y; // Keep the y position the same to avoid tilting the player
+            Vector3 lookDir = targetDir - transform.position;
+
+            // Rotate the player to face the direction of movement
+            if (lookDir.sqrMagnitude > 0.01f) // Check if the look direction vector is significant
+            {
+                transform.rotation = Quaternion.LookRotation(lookDir);
+            }
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Player\PlayerWeaponController.cs ===
+using UnityEngine;
+using Assets.Project.Scripts.Core;
+using Assets.Project.Scripts.Weapons;
+
+namespace Assets.Project.Scripts.Player
+{
+    public class PlayerWeaponController : MonoBehaviour
+    {
+        [Header("Weapon Configuration")]
+        [SerializeField] private WeaponData _weaponData;
+        [SerializeField] private Transform _firePoint;
+
+        [Header("Spawner Reference")]
+        [SerializeField] private ProjectileSpawner _projectileSpawner;
+
+        private float _lastFireTime;
+
+        /// <summary>
+        ///  Called by PlayerController when the player presses the fire button.
+        ///  Checks fire rate and spawns a projectile if enough time has passed since the last shot.
+        ///  </summary>
+        ///  
+        public void TryFire()
+        {
+            if (_weaponData == null || _projectileSpawner == null || _firePoint == null)
+            {
+                Debug.LogWarning("WeaponData or ProjectileSpawner/FirePoint/WeaponData is not assigned.");
+                return;
+            }
+
+            if (Time.time >= _lastFireTime + _weaponData.FireInterval)
+            {
+                _lastFireTime = Time.time;
+
+                // 1) Calculate random angle Y-axis for bullet spread
+                float randomAngle = Random.Range(-_weaponData.SpreadAngle, _weaponData.SpreadAngle);
+                Quaternion spreadRotation = Quaternion.Euler(0f, randomAngle, 0f);
+
+                // 2) Combine fire point rotation with spread rotation
+                Quaternion finalRotation = _firePoint.rotation * spreadRotation;
+
+                _projectileSpawner.SpawnProjectile(_firePoint.position, finalRotation, _weaponData, gameObject);
+            }
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Status\ActiveStatusEffect.cs ===
+using Assets.Project.Scripts.Combat;
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Status
+{
+    public class ActiveStatusEffect
+    {
+        [SerializeField] private StatusEffectType _type;
+        public StatusEffectType Type => _type;
+        [SerializeField] private float _remainingDuration;
+        public float RemainingDuration => _remainingDuration;
+        [SerializeField] private float _power;
+        public float Power => _power;
+        [SerializeField] private float _tickInterval;
+        public float TickInterval => _tickInterval;
+        [SerializeField] private float _tickTimer;
+        public float TickTimer => _tickTimer;
+        [SerializeField] private GameObject _source;
+        public GameObject Source => _source;
+
+        public ActiveStatusEffect(StatusEffectRequest request)
+        {
+            _type = request.Type;
+            _remainingDuration = request.Duration;
+            _power = request.Power;
+            _tickInterval = Mathf.Max(0.05f, request.TickInterval);
+            _tickTimer = 0f;
+            _source = request.Source;
+        }
+
+        /// <summary>
+        /// Advances timers. Returns false if the effect has expired and should be removed.
+        /// </summary>
+        public bool Tick(float deltaTime, DamageProcessor damageProcessor)
+        {
+            if (_remainingDuration <= 0f) return false; // Effect expired
+
+            _remainingDuration -= deltaTime;
+
+            if (_remainingDuration <= 0f) return false;
+
+            _tickTimer += deltaTime;
+
+            if (_tickTimer >= _tickInterval)
+            {
+                _tickTimer = 0f; // Reset tick timer
+                ApplyTick(damageProcessor);
+            }
+
+            return _remainingDuration > 0f;
+        }
+
+        private void ApplyTick(DamageProcessor damageProcessor)
+        {
+            // Stage 3: only bleed for now, but can be expanded to other effects in the future
+            if (_type != StatusEffectType.Bleed) return;
+            if (damageProcessor == null) return;
+
+            int damageAmount = Mathf.Max(1, Mathf.RoundToInt(_power));
+            damageProcessor.ApplyDamage(damageAmount, _source);
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Status\StatusEffectController.cs ===
+using UnityEngine;
+using Assets.Project.Scripts.Combat;
+using System.Collections.Generic;
+
+namespace Assets.Project.Scripts.Status
+{
+    [RequireComponent(typeof(DamageProcessor))]
+    public class StatusEffectController : MonoBehaviour
+    {
+        private readonly List<ActiveStatusEffect> _activeEffects = new ();
+        private DamageProcessor _damageProcessor;
+
+        private void Awake()
+        {
+            _damageProcessor = GetComponent<DamageProcessor>();
+        }
+ 
+        private void Update()
+        {
+            for (int i = _activeEffects.Count - 1; i >=0; i--)
+            {
+                // Tick each active effect and check if it is still active
+                bool stillActive = _activeEffects[i].Tick(Time.deltaTime, _damageProcessor);
+
+                if (!stillActive)
+                {
+                    _activeEffects.RemoveAt(i);
+                }
+            }
+        }
+
+        public void ApplyStatusEffect(StatusEffectRequest request)
+        {
+            if (request.Duration <= 0) return; 
+
+            // Stage 3: replace with a fresh instance of the effect
+            for (int i = 0; i < _activeEffects.Count; i++)
+            {
+                if (_activeEffects[i].Type != request.Type) continue;
+
+                // If the effect is already active, we can choose to refresh it or stack it based on your game design
+                _activeEffects[i] = new ActiveStatusEffect(request);
+
+                return;
+            }
+
+            // If the effect is not already active, add it to the list
+            _activeEffects.Add(new ActiveStatusEffect(request));
+        }
+
+        public void ApplyAllStatusEffects(StatusEffectRequest[] requests)
+        {
+            if (requests == null || requests.Length == 0) return;
+
+            foreach (var request in requests)
+            {
+                ApplyStatusEffect(request);
+            }
+        }
+
+        public bool HasStatusEffect(StatusEffectType type)
+        {
+            for (int i = 0; i< _activeEffects.Count; i++)
+            {
+                if (_activeEffects[i].Type == type) return true;
+            }
+
+            return false;
+        }
+
+        public void ClearAllStatusEffects()
+        {
+            _activeEffects.Clear();
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Status\StatusEffectPayload.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Status
+{
+    [System.Serializable]
+    public class StatusEffectPayload
+    {
+        [SerializeField] private StatusEffectType _type = StatusEffectType.Bleed;
+        public StatusEffectType Type => _type;
+        [SerializeField] private float _duration = 3f;
+        public float Duration => _duration;
+        [SerializeField] private float _power = 5f;
+        public float Power => _power;
+        [SerializeField] private float _tickInterval = 0.05f;
+        public float TickInterval => _tickInterval;
+        [SerializeField] private int _stacks = 1;
+        public int Stacks => _stacks;
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Status\StatusEffectRequest.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Status
+{
+    public readonly struct StatusEffectRequest
+    {
+        public readonly StatusEffectType Type;
+        public readonly float Duration;         // Seconds
+        public readonly float TickInterval;      // Seconds, for periodic effects
+        public readonly float Power;            // Meaning depends on type
+        public readonly int Stacks;             // Usually 1 on apply
+        public readonly GameObject Source;      // Who/what applied
+
+        public StatusEffectRequest
+            (
+                StatusEffectType type,
+                float duration,
+                float tickInterval,
+                float power,
+                GameObject source = null,
+                int stacks = 1
+            )
+        {
+            Type = type;
+            Duration = duration;
+            TickInterval = tickInterval;
+            Power = power;
+            Source = source;
+            Stacks = stacks;
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Status\StatusEffectRequestFactory.cs ===
+using Assets.Project.Scripts.Status;
+using UnityEngine;
+
+public static class StatusEffectRequestFactory
+{
+    public static StatusEffectRequest[] FromPayloads
+        (
+            StatusEffectPayload[] payloads,
+            GameObject source
+        )
+    {
+        if (payloads == null || payloads.Length == 0) return null;
+
+        var requests = new StatusEffectRequest[payloads.Length];
+        for (int i = 0; i < payloads.Length; i++)
+        {
+            var payload = payloads[i];
+            requests[i] = new StatusEffectRequest
+                (
+                    payload.Type,
+                    payload.Duration,
+                    payload.TickInterval,
+                    payload.Power,
+                    source,
+                    payload.Stacks
+                );
+        }
+
+        return requests;
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Status\StatusEffectType.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Status
+{
+    public enum StatusEffectType
+    {
+        Burn,
+        Bleed,
+        Stun,       // Long entity status (not the same as tiny hit stun)
+        Slow,
+        ArmorDecay
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Visuals\QuantizedPosition.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Visuals
+{
+    /// <summary>
+    /// Decouples visual transform position from the physics root to achieve
+    /// a stroboscopic, low-tick-rate visual effect reminiscnet of earrly 2000s video games.
+    /// </summary>
+    public class QuantizedPosition : MonoBehaviour
+    {
+        [Header("Retro Timing")]
+        [Tooltip("Visual position update frequence in Hz (e.g., 10 for 10 Hz)")]
+        [SerializeField] private float _retroFPS = 16f;
+
+        private Transform _parentRoot;
+
+        private Vector3 _accumulatedWorldOffset;
+
+        private float _timeAccumulator;
+        private float _stepInterval;
+
+        private Vector3 _lastSnappedWorldPos;
+
+        private void Awake()
+        {
+            _parentRoot = transform.parent;
+
+            if (_parentRoot == null)
+            {
+                Debug.LogError($"{name}: QuantizedPosition requires a parent transform to follow.", this);
+                enabled = false;
+                return;
+            }
+
+            // Calculate the time interval between visual updates based on the specified retro FPS
+            _stepInterval = 1f / _retroFPS;
+
+            _lastSnappedWorldPos = _parentRoot.position;
+        }
+
+        private void Start()
+        {
+            transform.SetParent(null); // Detach from parent to avoid inheriting its transform
+        }
+
+        private void LateUpdate()
+        {
+            if (_parentRoot == null)
+            {
+                Debug.LogError($"{name}: Parent transform is missing. Disabling QuantizedPosition.", this);
+                enabled = false;
+                Destroy(gameObject); // Optionally destroy the visual object if the parent is missing
+                return;
+            }
+            // Accumulate time since the last visual update
+            _timeAccumulator += Time.deltaTime;
+
+            // If enough time has passed, update the visual position
+            if (_timeAccumulator >= _stepInterval)
+            {
+                // Snap the visual position to the parent's position
+                _lastSnappedWorldPos = _parentRoot.position;
+                // Reset the time accumulator, preserving any leftover time
+                _timeAccumulator = 0f;
+            }
+
+            transform.position = _lastSnappedWorldPos;
+        }
+    }
+}
+
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Visuals\QuantizedRotation.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Visuals
+{
+    public class QuantizedRotation : MonoBehaviour
+    {
+        [Tooltip("The number of fixed directions (8 for 45-degree increments)")]
+        [SerializeField] private int _fixedDirections = 8;
+
+        private Transform _parentRoot;
+
+        private void Awake()
+        {
+            _parentRoot = transform.parent;
+
+            if (_parentRoot == null)
+            {
+                Debug.LogWarning("QuantizedRotation requires a parent transform to determine rotation.");
+            }
+        }
+
+        private void LateUpdate()
+        {
+            if (_parentRoot == null) return;
+
+            Vector3 parentForward = _parentRoot.forward;
+
+            // Convert 3D direction to 2D by ignoring the y component
+            float rawAngle = Mathf.Atan2(parentForward.x, parentForward.z) * Mathf.Rad2Deg;
+            // Determine the step angle based on the number of fixed directions
+            float stepAngle = 360f / _fixedDirections;
+            // Snap the raw angle to the nearest step angle
+            float snappedAngle = Mathf.Round(rawAngle / stepAngle) * stepAngle;
+
+            // Apply the snapped rotation to the object, keeping it upright (y-axis rotation only)
+            transform.rotation = Quaternion.Euler(0f, snappedAngle, 0f);
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Visuals\SteppedAnimator.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Visuals
+{
+    [RequireComponent(typeof(Animator))]
+    public class SteppedAnimator : MonoBehaviour
+    {
+        [Tooltip("Target visual animation rate (e.g., 12-16 FPS)")]
+        [SerializeField] private float _retroFPS = 14f;
+
+        private Animator _animator;
+        private float _timeAccumulator = 0f;
+        private float _stepInterval;
+
+        private void Awake()
+        {
+            _animator = GetComponent<Animator>();
+
+            if (_animator == null)
+            {
+                Debug.LogError("SteppedAnimator requires an Animator component. Script is disabled.");
+                enabled = false; // Disable the script if Animator is missing
+                return;
+            }
+
+            _animator.enabled = false; // Disable automatic animation updates
+
+            _stepInterval = 1f / _retroFPS;
+        }
+
+        private void LateUpdate()
+        {
+            _timeAccumulator += Time.deltaTime; // Accumulate time since the last update
+
+            if (_timeAccumulator >= _stepInterval)
+            {
+                // Update the animator manually at fixed intervals
+                _animator.Update(_timeAccumulator); 
+                _timeAccumulator = 0f; // Reset the accumulator after updating
+            }
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Weapons\HitEffectProfile.cs ===
+using UnityEngine;
+using Assets.Project.Scripts.Status;
+using Assets.Project.Scripts.Combat;
+
+namespace Assets.Project.Scripts.Weapons
+{
+    [CreateAssetMenu(fileName = "HitEffect_", menuName = "Combat/Hit Effect Profile")]
+    public class HitEffectProfile : ScriptableObject
+    {
+        [SerializeField] private int _damage = 15;
+        public int Damage => _damage;
+
+        [SerializeField] private DamageType _damageKind = DamageType.Physical;
+        public DamageType DamageKind => _damageKind;
+
+        [SerializeField] private float _stunDuration;
+        public float StunDuration => _stunDuration;
+
+        [SerializeField] private float _knockbackForce;
+        public float KnockbackForce => _knockbackForce;
+
+        [SerializeField] private ImpulseType _impulseKind = ImpulseType.PushAwayFromBullet;
+        public ImpulseType ImpulseKind => _impulseKind;
+
+        [SerializeField] private StatusEffectPayload[] _statusEffects;
+        public StatusEffectPayload[] StatusEffects => _statusEffects;
+
+        [Tooltip("If false, projectiles ignore targets with the same tag as the shooter, i.e. Enemy ignores Enemy")]
+        [SerializeField] private bool _canHitAllies = false;
+        public bool CanHitAllies => _canHitAllies;
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Weapons\MeleeWeaponData.cs ===
+using UnityEngine;
+
+namespace Assets.Project.Scripts.Weapons
+{
+    [CreateAssetMenu(fileName = "Melee_", menuName = "Combat/Melee Weapon Data")]
+    public class MeleeWeaponData : ScriptableObject
+    {
+        [SerializeField] private string _weaponName = "Knife";
+        public string WeaponName => _weaponName;
+
+        [SerializeField] private float _attackInterval = 0.5f;
+        public float AttackInterval => _attackInterval;
+
+        [SerializeField] private float _attackRange = 1.4f;
+        public float AttackRange => _attackRange;
+
+        [SerializeField] private float _hitRadius = 0.5f;
+        public float HitRadius => _hitRadius;
+
+        [Header("Hit Effects")]
+        [SerializeField] private HitEffectProfile _hitEffects;
+        public HitEffectProfile HitEffects => _hitEffects;
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Weapons\Projectile.cs ===
+using UnityEngine;
+using UnityEngine.Pool;
+using Assets.Project.Scripts.Combat;
+
+namespace Assets.Project.Scripts.Weapons
+{
+    [RequireComponent(typeof(Collider))]
+    public class Projectile : MonoBehaviour
+    {
+        [Header("Projectile Base Settings")]
+        private float _timer;
+        private GameObject _instigator;
+        private IObjectPool<Projectile> _pool;
+        private WeaponData _weaponData;
+
+        // Called when spawned from object pool or instantiated
+        public void Initialize(WeaponData data, GameObject instigator, IObjectPool<Projectile> originatingPool)
+        {
+            _weaponData = data;
+            _pool = originatingPool;
+            _instigator = instigator;
+        }
+
+        private void OnEnable()
+        {
+            // Resets timer automatically every time a bullet leaves the pool
+            _timer = 0f;
+        }
+
+        private void Update()
+        {
+            if (_weaponData == null) return;
+
+            // 1. Move forward smothly based on speed and deltaTime
+            transform.position += transform.forward * (_weaponData.BulletSpeed * Time.deltaTime);
+
+            // 2. Track lifetime and rycle when expired
+            _timer += Time.deltaTime;
+            if (_timer >= _weaponData.BulletLifetime)
+            {
+                Release();
+            }
+        }
+
+        private void OnTriggerEnter(Collider other)
+        {
+            // 1) Ignore the shooter who fired the projectile
+            if (_instigator != null && other.gameObject == _instigator) return;
+
+            // 2) Ignore allies with the same tag unless CanHitAllies is set to true
+            if (ShouldIgnoreAlly(other.gameObject)) return;
+
+            // 3) Deliver damage via IDamageable
+            if (other.TryGetComponent<IDamageable>(out var target))
+            {
+                target.TakeDamage(DamageInfo.FromProjectile(_weaponData, _instigator, transform, other));
+
+                Release();
+            }
+            else if(!other.isTrigger)
+            {
+                // If the projectile hits a non-damageable object, it should still despawn
+                Release();
+            }
+        }
+
+        private bool ShouldIgnoreAlly(GameObject hitObject)
+        {
+            if (_weaponData == null || _weaponData.HitEffects == null) return false;
+
+            if (_weaponData.HitEffects.CanHitAllies) return false;
+
+            // Check if the other object has the same tag as the instigator
+            if (_instigator == null || _weaponData == null || _weaponData.HitEffects == null)
+                return false;
+            
+            return !_instigator.CompareTag("Untagged") && hitObject.CompareTag(_instigator.tag);
+        }
+
+        // Called when the projectile's lifetime expires or it hits a target
+        private void Release()
+        {
+            if (_pool != null)
+                _pool.Release(this);
+            else
+                gameObject.SetActive(false);
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Weapons\WeaponController.cs ===
+using UnityEngine;
+using Assets.Project.Scripts.Core;
+
+namespace Assets.Project.Scripts.Weapons
+{
+    /// <summary>
+    /// WeaponController is responsible for managing the firing of projectiles.
+    /// It uses an object pool to efficiently reuse projectile instances.
+    /// </summary>
+    public class WeaponController : MonoBehaviour
+    {
+        [Header("WeaponSetup")]
+        [SerializeField] private WeaponData _weaponData;
+        [SerializeField] private Transform _firePoint;
+
+        // Timer tracing the excact game time when the next round can be fired
+        private float _nextFireTime = 0f;
+
+        [Header("Spawner Reference")]
+        [SerializeField] private ProjectileSpawner _projectileSpawner;
+
+        private void Awake()
+        {
+            if (_projectileSpawner == null)
+            {
+                _projectileSpawner = FindAnyObjectByType<ProjectileSpawner>();
+            }
+        }
+
+        /// <summary>
+        /// Attempts to fire the weapon based on fireRate cadence.
+        /// Can be called ontinously in update by player or AI.
+        /// </summary>
+        public void TryShoot()
+        {
+            // Guard Clause: Prevent firing if on cooldown or if no weapon is equipped
+            if (_weaponData == null || _projectileSpawner == null || _firePoint == null || Time.time < _nextFireTime) return;
+
+            // Calculate next allowed firing timestamp
+            _nextFireTime = Time.time + _weaponData.FireInterval;
+
+            ExecuteShot();
+        }
+
+        private void ExecuteShot()
+        {
+            // 1. Calculate random spread deviation on the Ordinate axis (horizontal sweep)
+            float randomSpread = Random.Range(-_weaponData.SpreadAngle, _weaponData.SpreadAngle);
+            Quaternion spreadRotation = Quaternion.Euler(0f, randomSpread, 0f);
+
+            // 2. Combine the fire point's rotation with the calculated spread rotation
+            Quaternion finalRotation = _firePoint.rotation * spreadRotation;
+
+            _projectileSpawner.SpawnProjectile(_firePoint.position, finalRotation, _weaponData, gameObject);
+        }
+    }
+}
+
+=== FILE: C:\Users\Litavr\The Book Of the Veiled Hunger - Start One\Assets\Project\Scripts\Weapons\WeaponData.cs ===
+using UnityEngine;
+using Assets.Project.Scripts.Combat;
+using UnityEngine.Serialization;
+using Assets.Project.Scripts.Status;
+
+namespace Assets.Project.Scripts.Weapons
+{
+    [CreateAssetMenu(fileName = "NewWeaponData", menuName = "Combat/Weapon Data")]
+
+    public class WeaponData : ScriptableObject
+    {
+        [Header("Display Info")]
+        [SerializeField] private string _weaponName = "Vanguard Heavy Rifle";
+        public string WeaponName => _weaponName;
+
+        [Header("Combat Stats")]
+        [FormerlySerializedAs("fireRate")]
+        [SerializeField] private float _fireInterval = 0.12f;
+        public float FireInterval => _fireInterval;
+        //[FormerlySerializedAs("damage")]
+        //[SerializeField] private int _damage = 25;
+        //public int Damage => _damage;
+        //[SerializeField] private DamageType _damageKind = DamageType.Physical;
+        //public DamageType DamageKind => _damageKind;
+
+        [Header("Projectile")]
+        [SerializeField] private float _bulletSpeed = 35f;
+        public float BulletSpeed => _bulletSpeed;
+        [SerializeField] private float _bulletLifetime = 2f;
+        public float BulletLifetime => _bulletLifetime;
+        [SerializeField] private float _spreadAngle = 2f;
+        public float SpreadAngle => _spreadAngle;
+
+        // --- Retro-inspired Stopping Power and Knockback effects ---
+
+        //[Header("Hit Reaction")]
+        //[Tooltip("Duration of the stun effect")]
+        //[SerializeField] private float _stunDuration;
+        //public float StunDuration => _stunDuration;
+
+        //[Tooltip("Force of the knockback effect")]
+        //[SerializeField] private float _knockbackForce;
+        //public float KnockbackForce => _knockbackForce;
+
+        //[Tooltip("Direction of push or pull")]
+        //[SerializeField] private ImpulseType _impulseKind = ImpulseType.PushAwayFromBullet;
+        //public ImpulseType ImpulseKind => _impulseKind;
+
+        //[Header("On-Hit Status Effects")]
+        //[SerializeField] private StatusEffectPayload[] _onHitEffects;
+        //public StatusEffectPayload[] OnHitEffects => _onHitEffects;
+
+        [Header("Prefab Reference")]
+        [SerializeField] private Projectile _bulletPrefab;
+        public Projectile BulletPrefab => _bulletPrefab;
+
+        [Header("Hit Effects")]
+        [SerializeField] private HitEffectProfile _hitEffects;
+        public HitEffectProfile HitEffects => _hitEffects;
+        //public HitEffectProfile HitEffectsOrNull => _hitEffects;
+        // else legacy fiealds
+    }
+}
+

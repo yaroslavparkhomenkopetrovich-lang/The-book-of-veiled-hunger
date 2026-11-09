@@ -24,5 +24,9 @@ namespace Assets.Project.Scripts.Weapons
 
         [SerializeField] private StatusEffectPayload[] _statusEffects;
         public StatusEffectPayload[] StatusEffects => _statusEffects;
+
+        [Tooltip("If false, projectiles ignore targets with the same tag as the shooter, i.e. Enemy ignores Enemy")]
+        [SerializeField] private bool _canHitAllies = false;
+        public bool CanHitAllies => _canHitAllies;
     }
 }
